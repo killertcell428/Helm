@@ -1,0 +1,14 @@
+# テスト用の依存関係
+# 使用方法: pip install -r requirements_test.txt
+
+# 基本の依存関係
+-r requirements_minimal.txt
+
+# テストフレームワーク
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0  # カバレッジ（オプション）
+
+# HTTPクライアント（統合テスト用）
+httpx>=0.24.0
+requests>=2.31.0

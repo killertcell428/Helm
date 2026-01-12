@@ -1,0 +1,18 @@
+# 最小限の依存関係（モックデータ使用時）
+# 実際のGoogleサービス統合が不要な場合に使用
+
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+
+# 以下のGoogle Cloudライブラリはオプション
+# 実際のGoogleサービス統合が必要な場合のみインストール
+# google-cloud-firestore>=2.13.1
+# google-cloud-aiplatform>=1.38.1
+# google-api-python-client>=2.108.0
+# google-auth>=2.25.2
+# google-auth-httplib2>=0.1.1
+# google-auth-oauthlib>=1.1.0
+

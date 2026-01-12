@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# 環境変数
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Google認証情報
+*.json
+!package*.json
+service-account-key.json
+workspace-credentials.json
+credentials/
+*.credentials.json
+token.json
+oauth_credentials.json
+
+# ログ
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
