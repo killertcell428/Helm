@@ -25,7 +25,7 @@
 
 3. **リポジトリURLをコピー**
    - 作成後、表示されるページでリポジトリのURLをコピー
-   - 例：`https://github.com/あなたのユーザー名/Google-PJ-Dev.git`
+   - 例：`https://github.com/killertcell428/Helm.git`
 
 ### ステップ2: ローカルリポジトリをGitHubに接続
 
@@ -37,7 +37,7 @@ cd c:\Users\uecha\Project_P\Personal\Google-PJ\Dev
 
 # GitHubリポジトリをリモートとして追加
 # （以下のURLは、ステップ1でコピーした実際のURLに置き換えてください）
-git remote add origin https://github.com/あなたのユーザー名/Google-PJ-Dev.git
+git remote add origin https://github.com/killertcell428/Helm.git
 
 # 現在のブランチ名を確認（通常はmasterまたはmain）
 git branch

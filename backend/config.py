@@ -49,6 +49,15 @@ class Config:
     ESCALATION_THRESHOLD: int = int(os.getenv("ESCALATION_THRESHOLD", "70"))  # エスカレーション閾値
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() == "true"  # デモモード: findingsがあれば常にエスカレーション
     
+    # LLM統合設定
+    USE_LLM: bool = os.getenv("USE_LLM", "false").lower() == "true"  # LLM統合を有効化
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-3.0-pro")  # 使用するモデル
+    LLM_MAX_RETRIES: int = int(os.getenv("LLM_MAX_RETRIES", "3"))  # 最大リトライ回数
+    LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "60"))  # タイムアウト時間（秒）
+    LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.2"))  # 温度パラメータ
+    LLM_TOP_P: float = float(os.getenv("LLM_TOP_P", "0.95"))  # Top-pサンプリング
+    OUTPUT_DIR: str = os.getenv("OUTPUT_DIR", "outputs")  # 出力ファイルの保存ディレクトリ
+    
     @classmethod
     def get_timeout(cls, timeout_type: str = "default") -> int:
         """

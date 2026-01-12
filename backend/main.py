@@ -6,18 +6,23 @@ Google Meet → 議事録・チャット取得 → 重要性・緊急性評価 �
 """
 
 from dotenv import load_dotenv
+import os
 load_dotenv()  # .envファイルを読み込む
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.exceptions import RequestValidationError
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime
 import traceback
-from utils.logger import logger
+import time
+from utils.logger import logger, set_log_context, clear_log_context
+from utils.error_notifier import error_notification_manager
 from utils.exceptions import (
     HelmException,
     ValidationError,
@@ -34,9 +39,11 @@ from services import (
     GoogleWorkspaceService,
     GoogleDriveService,
     VertexAIService,
-    ScoringService
+    ScoringService,
+    LLMService
 )
 from services.escalation_engine import EscalationEngine
+from services.output_service import OutputService
 
 app = FastAPI(
     title=config.API_TITLE,
@@ -53,16 +60,132 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ==================== リクエストロギングミドルウェア ====================
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """リクエストロギングとパフォーマンス計測のミドルウェア"""
+    
+    async def dispatch(self, request: Request, call_next):
+        # リクエストIDの生成
+        request_id = str(uuid.uuid4())
+        
+        # ログコンテキストの設定
+        set_log_context(
+            request_id=request_id,
+            endpoint=request.url.path,
+            method=request.method
+        )
+        
+        # リクエスト開始時刻
+        start_time = time.time()
+        
+        # リクエスト情報のログ
+        client_host = request.client.host if request.client else "unknown"
+        logger.info(
+            f"Request started: {request.method} {request.url.path}",
+            extra={
+                "extra_data": {
+                    "request_id": request_id,
+                    "client_host": client_host,
+                    "query_params": dict(request.query_params),
+                    "request_size": request.headers.get("content-length", "0")
+                }
+            }
+        )
+        
+        try:
+            # リクエストの処理
+            response = await call_next(request)
+            
+            # 処理時間の計算
+            process_time = time.time() - start_time
+            
+            # レスポンス情報のログ
+            logger.info(
+                f"Request completed: {request.method} {request.url.path} - {response.status_code}",
+                extra={
+                    "extra_data": {
+                        "request_id": request_id,
+                        "status_code": response.status_code,
+                        "process_time": f"{process_time:.3f}s",
+                        "response_size": response.headers.get("content-length", "unknown")
+                    }
+                }
+            )
+            
+            # パフォーマンスログ（1秒以上かかった場合）
+            if process_time > 1.0:
+                logger.warning(
+                    f"Slow request detected: {request.method} {request.url.path} took {process_time:.3f}s",
+                    extra={
+                        "extra_data": {
+                            "request_id": request_id,
+                            "process_time": f"{process_time:.3f}s",
+                            "threshold": "1.0s"
+                        }
+                    }
+                )
+            
+            # レスポンスヘッダーにリクエストIDを追加
+            response.headers["X-Request-ID"] = request_id
+            
+            return response
+            
+        except Exception as e:
+            # エラー発生時のログ
+            process_time = time.time() - start_time
+            logger.error(
+                f"Request failed: {request.method} {request.url.path}",
+                exc_info=True,
+                extra={
+                    "extra_data": {
+                        "request_id": request_id,
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "process_time": f"{process_time:.3f}s",
+                        "traceback": traceback.format_exc()
+                    }
+                }
+            )
+            raise
+        finally:
+            # ログコンテキストのクリア
+            clear_log_context()
+
+
+# リクエストロギングミドルウェアの追加
+app.add_middleware(RequestLoggingMiddleware)
+
 # ==================== グローバルエラーハンドラー ====================
 
 @app.exception_handler(HelmException)
 async def helm_exception_handler(request: Request, exc: HelmException):
     """Helmカスタム例外のハンドラー"""
     error_id = str(uuid.uuid4())
+    request_id = request.headers.get("X-Request-ID") or "unknown"
+    
+    error_data = {
+        "error_id": error_id,
+        "request_id": request_id,
+        "error_code": exc.error_code,
+        "message": exc.message,
+        "details": exc.details,
+        "endpoint": request.url.path,
+        "method": request.method,
+        "client_host": request.client.host if request.client else "unknown",
+        "timestamp": datetime.now().isoformat(),
+        "traceback": traceback.format_exc()
+    }
+    
     logger.error(
         f"Error {error_id}: {exc.error_code} - {exc.message}",
-        extra={"error_id": error_id, "error_code": exc.error_code, "details": exc.details}
+        extra={"extra_data": error_data},
+        exc_info=True
     )
+    
+    # エラー通知の送信
+    error_notification_manager.notify_error(error_data)
     
     status_code = 400
     if isinstance(exc, NotFoundError):
@@ -86,11 +209,21 @@ async def helm_exception_handler(request: Request, exc: HelmException):
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """バリデーションエラーのハンドラー"""
     error_id = str(uuid.uuid4())
+    request_id = request.headers.get("X-Request-ID") or "unknown"
     errors = exc.errors()
     
     logger.warning(
         f"Validation error {error_id}: {errors}",
-        extra={"error_id": error_id, "errors": errors}
+        extra={
+            "extra_data": {
+                "error_id": error_id,
+                "request_id": request_id,
+                "errors": errors,
+                "endpoint": request.url.path,
+                "method": request.method,
+                "client_host": request.client.host if request.client else "unknown"
+            }
+        }
     )
     
     return JSONResponse(
@@ -107,9 +240,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def http_exception_handler(request: Request, exc: HTTPException):
     """HTTP例外のハンドラー"""
     error_id = str(uuid.uuid4())
+    request_id = request.headers.get("X-Request-ID") or "unknown"
+    
     logger.warning(
         f"HTTP error {error_id}: {exc.status_code} - {exc.detail}",
-        extra={"error_id": error_id, "status_code": exc.status_code}
+        extra={
+            "extra_data": {
+                "error_id": error_id,
+                "request_id": request_id,
+                "status_code": exc.status_code,
+                "endpoint": request.url.path,
+                "method": request.method,
+                "client_host": request.client.host if request.client else "unknown"
+            }
+        }
     )
     
     return JSONResponse(
@@ -125,11 +269,28 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 async def global_exception_handler(request: Request, exc: Exception):
     """すべての未処理例外のハンドラー"""
     error_id = str(uuid.uuid4())
+    request_id = request.headers.get("X-Request-ID") or "unknown"
+    
+    error_data = {
+        "error_id": error_id,
+        "request_id": request_id,
+        "error_type": type(exc).__name__,
+        "error_message": str(exc),
+        "endpoint": request.url.path,
+        "method": request.method,
+        "client_host": request.client.host if request.client else "unknown",
+        "timestamp": datetime.now().isoformat(),
+        "traceback": traceback.format_exc()
+    }
+    
     logger.error(
         f"Unhandled error {error_id}: {str(exc)}",
         exc_info=True,
-        extra={"error_id": error_id, "traceback": traceback.format_exc()}
+        extra={"extra_data": error_data}
     )
+    
+    # エラー通知の送信
+    error_notification_manager.notify_error(error_data)
     
     return JSONResponse(
         status_code=500,
@@ -152,9 +313,15 @@ class ChatIngestRequest(BaseModel):
     messages: Optional[List[Dict[str, Any]]] = None
     metadata: Dict[str, Any]
 
+class MaterialIngestRequest(BaseModel):
+    material_id: str
+    content: str
+    metadata: Dict[str, Any]
+
 class AnalyzeRequest(BaseModel):
     meeting_id: str
     chat_id: Optional[str] = None
+    material_id: Optional[str] = None
 
 class EscalateRequest(BaseModel):
     analysis_id: str
@@ -192,11 +359,14 @@ drive_service = GoogleDriveService(
     shared_drive_id=config.GOOGLE_DRIVE_SHARED_DRIVE_ID,
     folder_id=config.GOOGLE_DRIVE_FOLDER_ID
 )  # 環境変数から認証情報を取得（サービスアカウントまたはOAuth）
+llm_service = LLMService()  # LLM統合サービス
+output_service = OutputService(output_dir=os.getenv("OUTPUT_DIR", "outputs"))  # 出力サービス
 
 # ==================== インメモリストレージ（開発用） ====================
 
 meetings_db: Dict[str, Dict] = {}
 chats_db: Dict[str, Dict] = {}
+materials_db: Dict[str, Dict] = {}  # 会議資料データベース
 analyses_db: Dict[str, Dict] = {}
 escalations_db: Dict[str, Dict] = {}
 approvals_db: Dict[str, Dict] = {}
@@ -333,6 +503,35 @@ async def ingest_chat(request: ChatIngestRequest):
         logger.error(f"Unexpected error in ingest_chat: {e}", exc_info=True)
         raise
 
+@app.post("/api/materials/ingest")
+async def ingest_material(request: MaterialIngestRequest):
+    """会議資料の取り込み"""
+    try:
+        logger.info(f"Material ingest request: {request.material_id}")
+        
+        material_data = {
+            "material_id": request.material_id,
+            "content": request.content,
+            "metadata": request.metadata,
+            "ingested_at": datetime.now().isoformat(),
+            "status": "ingested"
+        }
+        materials_db[request.material_id] = material_data
+        
+        logger.info(f"Material {request.material_id} ingested successfully")
+        
+        return {
+            "material_id": request.material_id,
+            "status": "success",
+            "content_length": len(request.content),
+            "metadata": request.metadata
+        }
+    except HelmException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in ingest_material: {e}", exc_info=True)
+        raise
+
 @app.post("/api/analyze")
 async def analyze(request: AnalyzeRequest):
     """構造的問題検知"""
@@ -353,18 +552,55 @@ async def analyze(request: AnalyzeRequest):
         if request.chat_id and not chat:
             logger.warning(f"Chat {request.chat_id} not found, proceeding without chat data")
         
-        # 構造的問題検知を実行
+        # 会議資料データを取得
+        material = materials_db.get(request.material_id) if request.material_id else None
+        if request.material_id and not material:
+            logger.warning(f"Material {request.material_id} not found, proceeding without material data")
+        
+        # 構造的問題検知を実行（LLM統合）
         try:
             meeting_parsed = meeting.get("parsed_data", {})
-            chat_parsed = chat.get("parsed_data", {}) if chat else None
+            # 生データも含める（LLMがテキストを直接分析できるように）
+            if not meeting_parsed.get("transcript") and meeting.get("transcript"):
+                meeting_parsed["transcript"] = meeting.get("transcript")
             
-            analysis_result = analyzer.analyze(meeting_parsed, chat_parsed)
+            chat_parsed = chat.get("parsed_data", {}) if chat else None
+            # 生データも含める
+            if chat and not chat_parsed.get("messages") and chat.get("messages"):
+                chat_parsed["messages"] = chat.get("messages")
+            
+            material_data = material if material else None
+            
+            # LLMサービスを使用して分析（フォールバックはLLMサービス内で処理）
+            analysis_result = llm_service.analyze_structure(
+                meeting_data=meeting_parsed,
+                chat_data=chat_parsed,
+                materials_data=material_data
+            )
+        except ServiceError:
+            # ServiceErrorはそのまま再スロー
+            raise
         except Exception as e:
-            logger.error(f"Failed to analyze: {e}", exc_info=True)
+            error_type = type(e).__name__
+            logger.error(
+                f"Failed to analyze: {e}",
+                extra={
+                    "error_type": error_type,
+                    "meeting_id": request.meeting_id,
+                    "chat_id": request.chat_id,
+                    "material_id": request.material_id
+                },
+                exc_info=True
+            )
             raise ServiceError(
                 message=f"構造的問題検知に失敗しました: {str(e)}",
-                service_name="StructureAnalyzer",
-                details={"meeting_id": request.meeting_id, "chat_id": request.chat_id}
+                service_name="LLMService",
+                details={
+                    "meeting_id": request.meeting_id,
+                    "chat_id": request.chat_id,
+                    "material_id": request.material_id,
+                    "error_type": error_type
+                }
             )
         
         analysis_data = {
@@ -372,16 +608,40 @@ async def analyze(request: AnalyzeRequest):
             "meeting_id": request.meeting_id,
             "chat_id": request.chat_id,
             "findings": analysis_result["findings"],
-            "scores": analysis_result["scores"],
+            "scores": analysis_result.get("scores", {}),
             "score": analysis_result["overall_score"],
             "severity": analysis_result["severity"],
             "urgency": analysis_result.get("urgency", "MEDIUM"),
             "explanation": analysis_result["explanation"],
             "created_at": analysis_result["created_at"],
-            "status": "completed"
+            "status": "completed",
+            # LLM生成かモックかを明示
+            "is_llm_generated": not analysis_result.get("_is_mock", True),
+            "llm_status": analysis_result.get("_llm_status", "unknown"),
+            "llm_model": analysis_result.get("_llm_model", None)
         }
         
         analyses_db[analysis_id] = analysis_data
+        
+        # 分析結果をJSONファイルに出力
+        try:
+            output_file_info = output_service.save_analysis_result(analysis_id, analysis_result)
+            analysis_data["output_file"] = output_file_info
+            logger.info(
+                f"Analysis result saved to file: {output_file_info.get('filename')}",
+                extra={"analysis_id": analysis_id, "filename": output_file_info.get('filename')}
+            )
+        except Exception as e:
+            error_type = type(e).__name__
+            logger.warning(
+                f"Failed to save analysis result to file: {e}",
+                extra={
+                    "error_type": error_type,
+                    "analysis_id": analysis_id
+                },
+                exc_info=True
+            )
+            # ファイル保存失敗は分析結果の返却には影響しない
         
         logger.info(f"Analysis {analysis_id} completed: score={analysis_result['overall_score']}, severity={analysis_result['severity']}")
         
@@ -526,14 +786,89 @@ async def execute(request: ExecuteRequest):
         
         execution_id = str(uuid.uuid4())
         
-        # タスク定義
-        tasks = [
-            {"id": "task1", "name": "市場データ分析", "status": "pending", "type": "research"},
-            {"id": "task2", "name": "社内データ統合", "status": "pending", "type": "analysis"},
-            {"id": "task3", "name": "3案比較資料の自動生成", "status": "pending", "type": "document"},
-            {"id": "task4", "name": "関係部署への事前通知", "status": "pending", "type": "notification"},
-            {"id": "task5", "name": "会議アジェンダの更新", "status": "pending", "type": "calendar"}
-        ]
+        # 分析結果と承認データを取得
+        escalation = escalations_db.get(approval.get("escalation_id"))
+        analysis = None
+        if escalation:
+            analysis = analyses_db.get(escalation.get("analysis_id"))
+        
+        # 承認された介入案を抽出
+        approved_interventions = None
+        if approval.get("modifications"):
+            modifications = approval.get("modifications")
+            if isinstance(modifications, dict):
+                # modificationsから介入案を抽出
+                approved_interventions = modifications.get("interventions") or modifications.get("approved_items")
+            elif isinstance(modifications, list):
+                approved_interventions = modifications
+        
+        # LLMサービスを使用してタスクを生成（フォールバックはLLMサービス内で処理）
+        try:
+            if analysis:
+                task_generation_result = llm_service.generate_tasks(
+                    analysis_result=analysis,
+                    approval_data=approval,
+                    approved_interventions=approved_interventions
+                )
+                
+                # 生成されたタスクを実行計画に反映
+                generated_tasks = task_generation_result.get("tasks", [])
+                tasks = []
+                for i, task_def in enumerate(generated_tasks, start=1):
+                    tasks.append({
+                        "id": task_def.get("id", f"task{i}"),
+                        "name": task_def.get("name", ""),
+                        "status": "pending",
+                        "type": task_def.get("type", "research"),
+                        "description": task_def.get("description", ""),
+                        "dependencies": task_def.get("dependencies", []),
+                        "estimated_duration": task_def.get("estimated_duration"),
+                        "expected_output": task_def.get("expected_output")
+                    })
+            else:
+                # 分析結果がない場合はモックタスクを使用
+                logger.warning("Analysis result not found, using mock tasks")
+                tasks = [
+                    {"id": "task1", "name": "市場データ分析", "status": "pending", "type": "research"},
+                    {"id": "task2", "name": "社内データ統合", "status": "pending", "type": "analysis"},
+                    {"id": "task3", "name": "3案比較資料の自動生成", "status": "pending", "type": "document"},
+                    {"id": "task4", "name": "関係部署への事前通知", "status": "pending", "type": "notification"},
+                    {"id": "task5", "name": "会議アジェンダの更新", "status": "pending", "type": "calendar"}
+                ]
+        except ServiceError:
+            # ServiceErrorはそのまま再スロー
+            raise
+        except Exception as e:
+            error_type = type(e).__name__
+            logger.error(
+                f"Failed to generate tasks with LLM: {e}",
+                extra={
+                    "error_type": error_type,
+                    "approval_id": request.approval_id,
+                    "has_analysis": analysis is not None
+                },
+                exc_info=True
+            )
+            # エラー時はモックタスクにフォールバック
+            logger.warning("Falling back to mock tasks due to LLM error")
+            tasks = [
+                {"id": "task1", "name": "市場データ分析", "status": "pending", "type": "research"},
+                {"id": "task2", "name": "社内データ統合", "status": "pending", "type": "analysis"},
+                {"id": "task3", "name": "3案比較資料の自動生成", "status": "pending", "type": "document"},
+                {"id": "task4", "name": "関係部署への事前通知", "status": "pending", "type": "notification"},
+                {"id": "task5", "name": "会議アジェンダの更新", "status": "pending", "type": "calendar"}
+            ]
+        
+        # タスク生成結果からLLM生成かモックかを取得
+        is_llm_generated = False
+        llm_status = "unknown"
+        llm_model = None
+        if analysis:
+            task_result = task_generation_result if 'task_generation_result' in locals() else None
+            if task_result:
+                is_llm_generated = not task_result.get("_is_mock", True)
+                llm_status = task_result.get("_llm_status", "unknown")
+                llm_model = task_result.get("_llm_model", None)
         
         execution_data = {
             "execution_id": execution_id,
@@ -542,10 +877,55 @@ async def execute(request: ExecuteRequest):
             "progress": 0,
             "tasks": tasks,
             "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat()
+            "updated_at": datetime.now().isoformat(),
+            # LLM生成かモックかを明示
+            "is_llm_generated": is_llm_generated,
+            "llm_status": llm_status,
+            "llm_model": llm_model
         }
         
         executions_db[execution_id] = execution_data
+        
+        # タスク生成結果をJSONファイルに出力
+        try:
+            if analysis:
+                # タスク生成結果を取得（LLM生成かモックかを含む）
+                task_result_data = task_generation_result if 'task_generation_result' in locals() else {
+                    "tasks": tasks,
+                    "execution_plan": {
+                        "total_tasks": len(tasks),
+                        "estimated_total_duration": "未計算",
+                        "critical_path": []
+                    },
+                    "_is_mock": True,
+                    "_llm_status": "unknown"
+                }
+                
+                task_result = {
+                    "tasks": tasks,
+                    "execution_plan": {
+                        "total_tasks": len(tasks),
+                        "estimated_total_duration": "未計算",
+                        "critical_path": []
+                    }
+                }
+                output_file_info = output_service.save_task_generation_result(execution_id, task_result_data)
+                execution_data["output_file"] = output_file_info
+                logger.info(
+                    f"Task generation result saved to file: {output_file_info.get('filename')}",
+                    extra={"execution_id": execution_id, "filename": output_file_info.get('filename')}
+                )
+        except Exception as e:
+            error_type = type(e).__name__
+            logger.warning(
+                f"Failed to save task generation result to file: {e}",
+                extra={
+                    "error_type": error_type,
+                    "execution_id": execution_id
+                },
+                exc_info=True
+            )
+            # ファイル保存失敗は実行開始には影響しない
         
         logger.info(f"Execution {execution_id} started: {len(tasks)} tasks")
         
@@ -812,6 +1192,74 @@ async def download_file(file_id: str):
         raise
     except Exception as e:
         logger.error(f"Unexpected error in download_file: {e}", exc_info=True)
+        raise
+
+@app.get("/api/outputs")
+async def list_outputs(file_type: Optional[str] = None):
+    """出力ファイル一覧取得"""
+    try:
+        logger.info(f"List outputs request: file_type={file_type}")
+        files = output_service.list_files(file_type=file_type)
+        return {
+            "files": files,
+            "total": len(files)
+        }
+    except HelmException:
+        raise
+    except Exception as e:
+        error_type = type(e).__name__
+        logger.error(
+            f"Unexpected error in list_outputs: {e}",
+            extra={
+                "error_type": error_type,
+                "file_type": file_type
+            },
+            exc_info=True
+        )
+        raise
+
+@app.get("/api/outputs/{file_id}")
+async def get_output_file(file_id: str):
+    """出力ファイル取得（ダウンロード）"""
+    try:
+        logger.info(f"Get output file request: {file_id}")
+        
+        # ファイルを取得
+        file_data = output_service.get_file(file_id)
+        if not file_data:
+            raise NotFoundError(
+                message=f"出力ファイルが見つかりません: {file_id}",
+                resource_type="output_file",
+                resource_id=file_id
+            )
+        
+        # ファイルパスを取得
+        file_path = output_service.get_file_path(file_id)
+        if not file_path:
+            raise NotFoundError(
+                message=f"出力ファイルが見つかりません: {file_id}",
+                resource_type="output_file",
+                resource_id=file_id
+            )
+        
+        # ファイルを返す
+        return FileResponse(
+            path=str(file_path),
+            filename=file_id,
+            media_type="application/json"
+        )
+    except HelmException:
+        raise
+    except Exception as e:
+        error_type = type(e).__name__
+        logger.error(
+            f"Unexpected error in get_output_file: {e}",
+            extra={
+                "error_type": error_type,
+                "file_id": file_id
+            },
+            exc_info=True
+        )
         raise
 
 if __name__ == "__main__":

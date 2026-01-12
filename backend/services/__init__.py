@@ -10,6 +10,7 @@ from .google_workspace import GoogleWorkspaceService
 from .google_drive import GoogleDriveService
 from .vertex_ai import VertexAIService
 from .scoring import ScoringService
+from .llm_service import LLMService
 
 __all__ = [
     "GoogleMeetService",
@@ -18,6 +19,7 @@ __all__ = [
     "GoogleWorkspaceService",
     "GoogleDriveService",
     "VertexAIService",
-    "ScoringService"
+    "ScoringService",
+    "LLMService",
 ]
 
