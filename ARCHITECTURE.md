@@ -41,7 +41,12 @@ Helmは、組織の意思決定プロセスを監視し、構造的問題を検�
 │  │                                                       │   │
 │  │  ┌──────────────┐  ┌──────────────┐                │   │
 │  │  │  Structure   │  │  LLM Service │                │   │
-│  │  │   Analyzer   │  │  (Vertex AI) │                │   │
+│  │  │   Analyzer   │  │  (Gemini)     │                │   │
+│  │  └──────────────┘  └──────────────┘                │   │
+│  │                                                       │   │
+│  │  ┌──────────────┐  ┌──────────────┐                │   │
+│  │  │  Multi-Role  │  │  Ensemble     │                │   │
+│  │  │  LLM Analyzer│  │  Scoring      │                │   │
 │  │  └──────────────┘  └──────────────┘                │   │
 │  │                                                       │   │
 │  │  ┌──────────────┐  ┌──────────────┐                │   │
@@ -92,35 +97,50 @@ Google Meet/Chat
 [Firestore保存] (将来)
 ```
 
-### 2. 構造的問題検知フロー
+### 2. 構造的問題検知フロー（マルチ視点評価システム）
 
 ```
 [構造化データ]
       │
-      ▼
-[LLM Service]
+      ├─────────────────────────────────────┐
+      │                                     │
+      ▼                                     ▼
+[ルールベース分析]              [マルチ視点LLM分析]
+[StructureAnalyzer]              [MultiRoleLLMAnalyzer]
+      │                                     │
+      │                                     ├─→ [Executive視点] (重み: 0.4)
+      │                                     ├─→ [Corp Planning視点] (重み: 0.3)
+      │                                     ├─→ [Staff視点] (重み: 0.2)
+      │                                     └─→ [Governance視点] (重み: 0.1)
+      │                                     │
+      │                                     ▼
+      │                              [各ロールの評価結果]
+      │                              (overall_score, severity, urgency, explanation)
       │
-      ├─→ [Vertex AI / Gemini分析] (実APIモード)
-      └─→ [ルールベース分析] (モックモード)
-      │
-      ▼
-[パターン検出]
-      │
-      ├─→ B1_正当化フェーズ
-      ├─→ ES1_報告遅延
-      └─→ その他のパターン
-      │
-      ▼
-[スコアリング & 説明生成]
-      │
-      ├─→ [Scoring Service]
-      └─→ [LLM説明生成]
-      │
-      ▼
-[アラート生成 & 結果保存]
-      │
-      ├─→ [Output Service] (JSONファイル保存)
-      └─→ [レスポンス返却]
+      └─────────────────────────────────────┘
+                      │
+                      ▼
+            [アンサンブルスコアリング]
+            [EnsembleScoringService]
+                      │
+                      ├─→ スコア計算: 0.6 × ルールベース + 0.4 × LLM平均
+                      ├─→ 重要度・緊急度: 安全側（最も強い）を採用
+                      └─→ 説明文: ルールベース + 主要ロールのコメント
+                      │
+                      ▼
+            [パターン検出結果]
+                      │
+                      ├─→ B1_正当化フェーズ
+                      ├─→ ES1_報告遅延
+                      └─→ A2_撤退判断の遅れ
+                      │
+                      ▼
+            [アラート生成 & 結果保存]
+                      │
+                      ├─→ [Output Service] (JSONファイル保存)
+                      └─→ [レスポンス返却]
+                            (findings, score, severity, urgency, 
+                             multi_view, ensemble)
 ```
 
 ### 3. Executive呼び出しフロー
@@ -222,9 +242,9 @@ backend/
 │   ├── google_meet.py      # Google Meet統合
 │   ├── google_chat.py      # Google Chat統合
 │   ├── analyzer.py         # 構造的問題検知（ルールベース）
-│   ├── llm_service.py      # LLM統合サービス（Vertex AI / Gemini）
-│   ├── vertex_ai.py        # Vertex AI統合（レガシー）
-│   ├── vertex_ai_real.py   # Vertex AI実装
+│   ├── multi_view_analyzer.py  # マルチ視点LLM分析
+│   ├── ensemble_scoring.py     # アンサンブルスコアリング
+│   ├── llm_service.py      # LLM統合サービス（Gemini / Gen AI SDK）
 │   ├── scoring.py          # スコアリングサービス
 │   ├── escalation_engine.py # エスカレーション判断エンジン
 │   ├── google_workspace.py # Google Workspace統合
@@ -255,18 +275,31 @@ backend/
 - リスク検出、エスカレーション検出、反対意見検出
 
 **LLMService**
-- Vertex AI / Gemini統合
+- Gemini統合（Gen AI SDK経由）
 - 構造的問題検知（LLM分析）
 - タスク生成（LLM生成）
+- ロール別プロンプト生成
 - モックフォールバック
 
+**MultiRoleLLMAnalyzer**
+- マルチ視点LLM分析
+- 4つのロール（Executive, Corp Planning, Staff, Governance）で同一データを評価
+- 各ロールの重み付け（デフォルト: 0.4, 0.3, 0.2, 0.1）
+
+**EnsembleScoringService**
+- ルールベース分析結果とマルチ視点LLM分析結果の統合
+- アンサンブルスコア計算（0.6 × ルールベース + 0.4 × LLM平均）
+- 重要度・緊急度の安全側決定
+
 **StructureAnalyzer**
-- ルールベース分析（フォールバック用）
+- ルールベース分析（安全側のベースライン）
 - パターン検出とスコアリング
+- 定量指標の抽出（KPI下方修正回数、撤退議論の有無、判断集中率など）
 
 **ScoringService**
 - スコアリングロジック
 - 定量評価基準の抽出
+- 重要度・緊急度の計算
 
 **EscalationEngine**
 - エスカレーション判断
@@ -338,40 +371,130 @@ backend/
     description: string;
     evidence: string[];
     score: number;
+    urgency?: string;
+    evaluation?: {
+      overall_score: number;
+      importance_score: number;
+      urgency_score: number;
+      severity: string;
+      urgency: string;
+      reasons: string[];
+    };
   }>;
-  score: number;
+  score: number;  // アンサンブル後の最終スコア
   severity: string;
+  urgency: string;
   explanation: string;
   created_at: string;
+  // LLMメタ情報
+  is_llm_generated: boolean;
+  llm_status: string;
+  llm_model?: string;
+  // マルチ視点評価結果
+  multi_view?: Array<{
+    role_id: string;
+    weight: number;
+    overall_score: number;
+    severity: string;
+    urgency: string;
+    explanation?: string;
+  }>;
+  // アンサンブル結果
+  ensemble?: {
+    overall_score: number;
+    severity: string;
+    urgency: string;
+    reasons?: string[];
+    contributing_roles?: Array<{
+      role_id: string;
+      weight: number;
+      overall_score: number;
+      severity: string;
+      urgency: string;
+    }>;
+  };
 }
 ```
+
+## 評価システムのアーキテクチャ
+
+### マルチ視点評価システム
+
+Helmは、ルールベース分析とマルチ視点LLM分析を組み合わせたアンサンブル評価システムを採用しています。
+
+#### 1. ルールベース分析
+
+定量的な指標に基づいて構造的問題を検知します：
+
+- **KPI下方修正回数**: 会議内でKPIの下方修正が何回言及されたか
+- **撤退議論の有無**: 撤退やピボットの議論が行われたか
+- **判断集中率**: 最も多く発言した人の発言数 / 総発言数
+- **反対意見の無視**: チャットで反対意見が出ているが、会議で反映されていない
+
+これらの指標から、以下のパターンを検出します：
+
+- **B1_正当化フェーズ**: KPI下方修正が2回以上、撤退議論なし、判断集中率40%以上
+- **ES1_報告遅延**: リスク提起メッセージあり、エスカレーション未完了
+
+#### 2. マルチ視点LLM分析
+
+同じ会議ログとチャットログを、4つの異なる視点からLLM（Gemini）で評価します：
+
+- **Executive視点（重み: 0.4）**: 全社の業績・リスク・ステークホルダー責任の観点
+- **Corp Planning視点（重み: 0.3）**: KPI・事業ポートフォリオ・撤退/投資判断の観点
+- **Staff視点（重み: 0.2）**: 実行可能性と現場負荷の観点
+- **Governance視点（重み: 0.1）**: 報告遅延・隠れたリスク・コンプライアンスの観点
+
+各ロールは専用のプロンプトを使用し、それぞれの立場から構造的リスクを評価します。
+
+#### 3. アンサンブルスコアリング
+
+ルールベース分析結果とマルチ視点LLM分析結果を統合します：
+
+- **スコア計算**: `最終スコア = 0.6 × ルールベーススコア + 0.4 × LLM平均スコア`
+- **重要度・緊急度**: ルールベースと各ロールの結果のうち、最も強い（安全側）を採用
+- **説明文**: ルールベースの説明 + 主要ロール（Executive, Corp Planning）のコメント
+
+このアプローチにより、単一の評価軸では見落としがちな問題も、複数の視点から検知できるようになります。
 
 ## パターン検出ロジック
 
 ### B1_正当化フェーズ
 
-**検出条件:**
+**検出条件（ルールベース）:**
 - KPI下方修正が2回以上
 - 撤退/ピボット議論が一度も行われていない
-- 判断集中率が70%以上
+- 判断集中率が40%以上
 
 **スコア計算:**
-- 基本スコア: 75点
-- 閾値: 70点
+- ルールベース基本スコア: 75点（閾値: 70点）
+- LLM評価: 各ロールが独自に評価（通常70-85点）
+- アンサンブル後: ルールベースとLLMの重み付き平均
 
 **説明:**
 「現在の会議構造は「正当化フェーズ」に入っています。数値悪化は共有されていますが、戦略変更を提案する主体と「やめる」という選択肢が構造的に排除されています。」
 
 ### ES1_報告遅延
 
-**検出条件:**
+**検出条件（ルールベース）:**
 - リスク提起メッセージが存在
 - エスカレーション未完了
 - 判断集中率が50%未満
 
 **スコア計算:**
-- 基本スコア: 65点
-- 閾値: 40点
+- ルールベース基本スコア: 65点（閾値: 40点）
+- LLM評価: 各ロールが独自に評価（特にGovernance視点が強く検出）
+- アンサンブル後: ルールベースとLLMの重み付き平均
+
+### A2_撤退判断の遅れ
+
+**検出条件（主にLLM検出）:**
+- DX事業の営業利益率が悪化しているにも関わらず、撤退やピボットの議論が行われていない
+- チャットログから現場レベルでの問題意識が示唆される
+
+**スコア計算:**
+- LLM評価: 各ロールが独自に評価（通常60-70点）
+- アンサンブル後: LLM評価が主要な要素となる
 
 ## デプロイアーキテクチャ
 
@@ -488,9 +611,14 @@ backend/
 
 ### 実装済み機能
 
-- ✅ LLM統合（Vertex AI / Gemini）
-  - 構造的問題検知（LLM分析）
+- ✅ **マルチ視点評価システム**
+  - ルールベース分析（定量的指標に基づく検知）
+  - マルチ視点LLM分析（4つのロール視点から評価）
+  - アンサンブルスコアリング（統合評価）
+- ✅ LLM統合（Gemini / Gen AI SDK）
+  - 構造的問題検知（マルチ視点LLM分析）
   - タスク生成（LLM生成）
+  - ロール別プロンプト生成
   - モックフォールバック
 - ✅ エラーハンドリングの改善
   - カスタム例外クラス

@@ -13,7 +13,10 @@ HelmのバックエンドAPIサーバー。Googleサービス統合とAI自律�
 
 - Google Meet議事録の取り込み
 - Google Chatログの取り込み
-- 構造的問題検知（Vertex AI / Gemini）
+- **マルチ視点評価システム**による構造的問題検知
+  - ルールベース分析（定量的指標に基づく検知）
+  - マルチ視点LLM分析（4つのロール視点から評価）
+  - アンサンブルスコアリング（統合評価）
 - Executive呼び出しと承認
 - Googleサービス経由でのタスク実行
 - 結果のダウンロード
@@ -53,6 +56,27 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - `GET /api/execution/{id}` - 実行状態取得
 - `GET /api/execution/{id}/results` - 実行結果取得
 
+## 評価システム
+
+Helmは、**マルチ視点評価システム**を採用しています。このシステムは、ルールベース分析とマルチ視点LLM分析をアンサンブルして、より精度の高い評価を実現します。
+
+### 評価の流れ
+
+1. **ルールベース分析** (`StructureAnalyzer`)
+   - 定量的指標（KPI下方修正回数、撤退議論の有無、判断集中率など）に基づいて構造的問題を検知
+   - 安全側のベースラインとして機能
+
+2. **マルチ視点LLM分析** (`MultiRoleLLMAnalyzer`)
+   - 同じデータを4つの異なる視点からLLM（Gemini）で評価
+   - Executive視点（重み: 0.4）、Corp Planning視点（重み: 0.3）、Staff視点（重み: 0.2）、Governance視点（重み: 0.1）
+
+3. **アンサンブルスコアリング** (`EnsembleScoringService`)
+   - ルールベース結果とLLM結果を統合
+   - スコア計算: `0.6 × ルールベース + 0.4 × LLM平均`
+   - 重要度・緊急度: 安全側（最も強い）を採用
+
+詳細は [アーキテクチャドキュメント](../ARCHITECTURE.md) を参照してください。
+
 ## 開発
 
 ### 実API統合完了 ✅
@@ -61,7 +85,8 @@ Google API統合が完了しました：
 - ✅ Google Drive API（ファイル保存・ダウンロード）
 - ✅ Google Docs API（ドキュメント作成）
 - ✅ Google Chat API（メッセージ取得）
-- ✅ Google Meet API（議事録取得の準備）
+- ✅ Google Meet API（議事録取得）
+- ✅ LLM統合（Gemini / Gen AI SDK）
 
 **詳細**: [REAL_DATA_IMPLEMENTATION.md](./REAL_DATA_IMPLEMENTATION.md) を参照してください。
 

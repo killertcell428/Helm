@@ -2,6 +2,41 @@
 
 組織を賢くするAI - Helmの開発リポジトリ
 
+## 概要
+
+Helmは、組織の意思決定プロセスを監視し、構造的問題を検知して改善を提案するAIシステムです。Google Meetの議事録やGoogle Chatのログを分析し、意思決定の遅延や構造的な問題を自動的に検出します。
+
+## 主な機能
+
+### 構造的問題検知
+
+Helmは、会議議事録とチャットログから以下のような構造的問題を検知します：
+
+- **B1_正当化フェーズ**: KPI悪化が続いているにも関わらず、戦略変更の議論が行われない
+- **ES1_報告遅延**: リスク認識があるにも関わらず、上位への報告が遅延している
+- **A2_撤退判断の遅れ**: 事業の悪化が明らかなのに、撤退やピボットの議論が行われない
+
+### マルチ視点評価システム
+
+Helmは、複数の視点から同一のデータを評価することで、より精度の高い判断を実現します：
+
+- **経営者視点（Executive）**: 全社の業績・リスク・ステークホルダー責任の観点から評価
+- **経営企画視点（Corp Planning）**: KPI・事業ポートフォリオ・撤退/投資判断の観点から評価
+- **現場視点（Staff）**: 実行可能性と現場負荷の観点から評価
+- **ガバナンス視点（Governance）**: 報告遅延・隠れたリスク・コンプライアンスの観点から評価
+
+各視点の評価結果をアンサンブル（統合）することで、人間の経営判断に近い精度で構造リスクを評価します。
+
+### AI自律実行
+
+Executiveの承認後、Helmは自律的に以下のタスクを実行します：
+
+- 市場データ分析
+- 社内データ統合
+- 3案比較資料の自動生成
+- 関係部署への事前通知
+- 会議アジェンダの更新
+
 ## 📚 ドキュメント
 
 **初めての方はこちらから:**
@@ -17,17 +52,23 @@ Dev/
 │   └── v0-helm-demo/          # フロントエンド（Next.js）
 │       ├── app/
 │       │   └── demo/
-│       │       └── case1/      # Case1デモページ
+│       │       ├── case1/      # Case1デモページ
+│       │       ├── case2/      # Case2デモページ
+│       │       └── case3/      # Case3デモページ
 │       └── lib/
 │           └── api.ts         # APIクライアント
 ├── backend/                    # バックエンド（Python FastAPI）
 │   ├── main.py                # メインAPI
 │   ├── services/              # サービス層
-│   │   ├── google_meet.py
-│   │   ├── google_chat.py
-│   │   ├── analyzer.py
-│   │   ├── google_workspace.py
-│   │   └── google_drive.py
+│   │   ├── google_meet.py     # Google Meet統合
+│   │   ├── google_chat.py     # Google Chat統合
+│   │   ├── analyzer.py        # 構造的問題検知（ルールベース）
+│   │   ├── multi_view_analyzer.py  # マルチ視点LLM分析
+│   │   ├── ensemble_scoring.py     # アンサンブルスコアリング
+│   │   ├── llm_service.py     # LLM統合サービス
+│   │   ├── scoring.py          # スコアリングサービス
+│   │   ├── google_workspace.py # Google Workspace統合
+│   │   └── google_drive.py     # Google Drive統合
 │   ├── schemas/               # データスキーマ
 │   │   └── firestore.py
 │   └── requirements.txt
@@ -56,63 +97,59 @@ pnpm dev
 
 フロントエンドは `http://localhost:3000` で起動します。
 
-## 実装フロー
+## システムフロー
 
 ```
-Google Meet → 議事録・チャット取得 → 重要性・緊急性評価 → 
-人が承認/指示 → Googleサービス経由でリサーチ・分析・資料作成 → 
+Google Meet → 議事録・チャット取得 → マルチ視点評価（ルールベース + LLM） → 
+アンサンブルスコアリング → Executive承認 → AI自律実行 → 
 結果をアプリに返してダウンロード → 次回会議へ
 ```
 
-## 現在の実装状況
+## 評価システムの仕組み
 
-### Week 2完了 ✅
+### 1. ルールベース分析
 
-**実装完了項目**:
-- ✅ Google API統合（Drive, Docs, Chat, Meet）
-- ✅ 実データ実装（フロントエンド・バックエンド）
-- ✅ エラーハンドリングの改善
-- ✅ 全機能の動作確認
+定量的な指標（KPI下方修正回数、撤退議論の有無、判断集中率など）に基づいて構造的問題を検知します。これは安全側のベースラインとして機能します。
 
-**詳細**: [docs/status/WEEK2_SUMMARY.md](./docs/status/WEEK2_SUMMARY.md) を参照してください。
+### 2. マルチ視点LLM分析
 
-### 実装済み
+同じ会議ログとチャットログを、4つの異なる視点（経営者、経営企画、現場、ガバナンス）からLLM（Gemini）で評価します。各視点は独自のプロンプトを使用し、それぞれの立場から構造的リスクを評価します。
 
-- ✅ バックエンドAPI基盤
-- ✅ Googleサービス統合（実API + モックフォールバック）
-- ✅ 構造的問題検知（ルールベース）
-- ✅ フロントエンド連携
-- ✅ 実データ表示機能
-- ✅ エラーハンドリング（ユーザーフレンドリーなメッセージ）
+### 3. アンサンブルスコアリング
 
-### 実装予定 / 進行中
+ルールベース分析結果とマルチ視点LLM分析結果を統合して、最終的なスコアと重要度・緊急度を決定します：
 
-- ⏳ Vertex AI / Gemini統合（準備完了、実API統合待ち）
-- ⏳ テストの拡充（E2E + パフォーマンス）
-- ⏳ パフォーマンス最適化
+- **スコア計算**: `最終スコア = 0.6 × ルールベーススコア + 0.4 × LLM平均スコア`
+- **重要度・緊急度**: ルールベースと各ロールの結果のうち、最も強い（安全側）を採用
+
+このアプローチにより、単一の評価軸では見落としがちな問題も、複数の視点から検知できるようになります。
+
+## 技術スタック
+
+### バックエンド
+- **フレームワーク**: FastAPI
+- **言語**: Python 3.12
+- **LLM**: Google Gemini 2.0 Flash (Gen AI SDK)
+- **Google API**: `google-api-python-client`, `google-auth-oauthlib`
+- **テスト**: pytest
+
+### フロントエンド
+- **フレームワーク**: Next.js 16.0.10 (Turbopack)
+- **言語**: TypeScript
+- **UI**: React, Tailwind CSS
+- **状態管理**: React Hooks
 
 ## ドキュメント
 
 - [📑 ドキュメント一覧](./DOCUMENTATION_INDEX.md) - 全ドキュメントのインデックス
-- [📊 プロジェクト状況](./docs/status/PROJECT_STATUS.md) - 現在の実装状況
-- [📝 Week 2サマリー](./docs/status/WEEK2_SUMMARY.md) - Week 2の実装サマリー
-- [🚀 次のステップ](./docs/status/NEXT_STEPS.md) - 次のステップ候補
+- [📐 アーキテクチャドキュメント](./ARCHITECTURE.md) - システム全体の設計
+- [📖 APIドキュメント](./backend/API_DOCUMENTATION.md) - 全APIエンドポイントの詳細
+- [🔧 開発者ガイド](./docs/guides/DEVELOPER_GUIDE.md) - 開発者向けガイド
 - [バックエンドセットアップガイド](./backend/SETUP.md)
-- [テスト実行サマリー](./backend/TEST_SETUP_SUMMARY.md) - テスト（ユニット/統合/E2E/パフォーマンス）の実行方法
-- [アーキテクチャ設計](./Architectures/)
-
-## 開発スケジュール
-
-- **Week 1（1/20-1/26）**: 基盤構築とGoogle API統合 ✅
-- **Week 2（1/27-2/2）**: コア機能実装・実API統合・実データ実装 ✅
-- **Week 3（2/3-2/9）**: 機能強化・品質向上
-- **Week 4（2/10-2/15）**: 提出物準備
-
-**次のステップ**: [docs/status/NEXT_STEPS.md](./docs/status/NEXT_STEPS.md) を参照してください。
+- [テスト実行サマリー](./backend/TEST_SETUP_SUMMARY.md) - テストの実行方法
 
 ## 提出物要件
 
 - [ ] GitHubリポジトリ（公開）
 - [ ] デプロイURL（動作確認可能）
 - [ ] Zenn記事（概要、アーキテクチャ図、デモ動画3分）
-

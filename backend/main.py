@@ -35,14 +35,16 @@ from utils.exceptions import (
 )
 from config import config
 from services import (
-    GoogleMeetService, 
-    GoogleChatService, 
+    GoogleMeetService,
+    GoogleChatService,
     StructureAnalyzer,
     GoogleWorkspaceService,
     GoogleDriveService,
     VertexAIService,
     ScoringService,
-    LLMService
+    LLMService,
+    MultiRoleLLMAnalyzer,
+    EnsembleScoringService,
 )
 from services.escalation_engine import EscalationEngine
 from services.output_service import OutputService
@@ -347,9 +349,9 @@ chat_service = GoogleChatService(
 vertex_ai_service = VertexAIService()  # モックデータ使用（実際のAPI統合は環境変数設定後）
 scoring_service = ScoringService()  # 重要性・緊急性評価サービス
 analyzer = StructureAnalyzer(
-    use_vertex_ai=False, 
+    use_vertex_ai=False,
     vertex_ai_service=vertex_ai_service,
-    scoring_service=scoring_service
+    scoring_service=scoring_service,
 )  # ルールベース分析 + スコアリング
 escalation_engine = EscalationEngine(escalation_threshold=config.ESCALATION_THRESHOLD)  # エスカレーション判断エンジン（デモ用に50に設定）
 workspace_service = GoogleWorkspaceService(
@@ -362,6 +364,8 @@ drive_service = GoogleDriveService(
     folder_id=config.GOOGLE_DRIVE_FOLDER_ID
 )  # 環境変数から認証情報を取得（サービスアカウントまたはOAuth）
 llm_service = LLMService()  # LLM統合サービス
+multi_view_analyzer = MultiRoleLLMAnalyzer(llm_service=llm_service)  # マルチ視点LLM分析
+ensemble_scoring_service = EnsembleScoringService()  # アンサンブルスコアリング
 output_service = OutputService(output_dir=os.getenv("OUTPUT_DIR", "outputs"))  # 出力サービス
 
 # ==================== インメモリストレージ（開発用） ====================
@@ -890,25 +894,37 @@ async def analyze(request: AnalyzeRequest):
         if request.material_id and not material:
             logger.warning(f"Material {request.material_id} not found, proceeding without material data")
         
-        # 構造的問題検知を実行（LLM統合）
+        # 構造的問題検知を実行（ルールベース + マルチ視点LLMのアンサンブル）
         try:
-            meeting_parsed = meeting.get("parsed_data", {})
+            meeting_parsed = meeting.get("parsed_data", {}) or {}
             # 生データも含める（LLMがテキストを直接分析できるように）
             if not meeting_parsed.get("transcript") and meeting.get("transcript"):
                 meeting_parsed["transcript"] = meeting.get("transcript")
             
             chat_parsed = chat.get("parsed_data", {}) if chat else None
             # 生データも含める
-            if chat and not chat_parsed.get("messages") and chat.get("messages"):
+            if chat and not (chat_parsed or {}).get("messages") and chat.get("messages"):
+                if not chat_parsed:
+                    chat_parsed = {}
                 chat_parsed["messages"] = chat.get("messages")
             
             material_data = material if material else None
             
-            # LLMサービスを使用して分析（フォールバックはLLMサービス内で処理）
-            analysis_result = llm_service.analyze_structure(
+            # ルールベース分析（常に実行し、安全側のベースラインとする）
+            # use_vertex_ai=False なので、analyze() は _analyze_with_rules を呼ぶ
+            rule_result = analyzer.analyze(meeting_parsed, chat_parsed)
+            
+            # マルチ視点LLM分析（LLM利用可否は内部で判定）
+            multi_view_results = multi_view_analyzer.analyze_with_roles(
                 meeting_data=meeting_parsed,
                 chat_data=chat_parsed,
-                materials_data=material_data
+                materials_data=material_data,
+            )
+            
+            # アンサンブルスコアリング
+            ensemble_result = ensemble_scoring_service.combine(
+                rule_result=rule_result,
+                role_results=multi_view_results,
             )
         except ServiceError:
             # ServiceErrorはそのまま再スロー
@@ -927,7 +943,7 @@ async def analyze(request: AnalyzeRequest):
             )
             raise ServiceError(
                 message=f"構造的問題検知に失敗しました: {str(e)}",
-                service_name="LLMService",
+                service_name="AnalysisEnsemble",
                 details={
                     "meeting_id": request.meeting_id,
                     "chat_id": request.chat_id,
@@ -940,25 +956,46 @@ async def analyze(request: AnalyzeRequest):
             "analysis_id": analysis_id,
             "meeting_id": request.meeting_id,
             "chat_id": request.chat_id,
-            "findings": analysis_result["findings"],
-            "scores": analysis_result.get("scores", {}),
-            "score": analysis_result["overall_score"],
-            "severity": analysis_result["severity"],
-            "urgency": analysis_result.get("urgency", "MEDIUM"),
-            "explanation": analysis_result["explanation"],
-            "created_at": analysis_result["created_at"],
+            # アンサンブル結果をトップレベルに反映
+            "findings": ensemble_result.get("findings", []),
+            "scores": rule_result.get("scores", {}),
+            "score": ensemble_result.get("overall_score", 0),
+            "severity": ensemble_result.get("severity", "MEDIUM"),
+            "urgency": ensemble_result.get("urgency", "MEDIUM"),
+            "explanation": ensemble_result.get("explanation", ""),
+            "created_at": rule_result.get("created_at", datetime.now().isoformat()),
             "status": "completed",
-            # LLM生成かモックかを明示
-            "is_llm_generated": not analysis_result.get("_is_mock", True),
-            "llm_status": analysis_result.get("_llm_status", "unknown"),
-            "llm_model": analysis_result.get("_llm_model", None)
+            # LLM生成かモックかを明示（マルチロール結果が1つでもあればLLM利用とみなす）
+            "is_llm_generated": len(multi_view_results) > 0,
+            "llm_status": "success" if len(multi_view_results) > 0 else "disabled",
+            "llm_model": llm_service.model_name if len(multi_view_results) > 0 else None,
+            # 追加メタ情報
+            "multi_view": multi_view_results,
+            "ensemble": {
+                "overall_score": ensemble_result.get("overall_score", 0),
+                "severity": ensemble_result.get("severity", "MEDIUM"),
+                "urgency": ensemble_result.get("urgency", "MEDIUM"),
+                "reasons": ensemble_result.get("reasons", []),
+                "contributing_roles": ensemble_result.get("contributing_roles", []),
+            },
         }
         
         analyses_db[analysis_id] = analysis_data
         
         # 分析結果をJSONファイルに出力
         try:
-            output_file_info = output_service.save_analysis_result(analysis_id, analysis_result)
+            # アンサンブル結果を保存用の形式に変換
+            output_data = {
+                "findings": ensemble_result.get("findings", []),
+                "overall_score": ensemble_result.get("overall_score", 0),
+                "severity": ensemble_result.get("severity", "MEDIUM"),
+                "urgency": ensemble_result.get("urgency", "MEDIUM"),
+                "explanation": ensemble_result.get("explanation", ""),
+                "created_at": rule_result.get("created_at", datetime.now().isoformat()),
+                "multi_view": multi_view_results,
+                "ensemble": ensemble_result,
+            }
+            output_file_info = output_service.save_analysis_result(analysis_id, output_data)
             analysis_data["output_file"] = output_file_info
             # LogRecordの予約キーである"filename"はextraで上書きできないため、別キー名を使用する
             logger.info(
@@ -980,7 +1017,7 @@ async def analyze(request: AnalyzeRequest):
             )
             # ファイル保存失敗は分析結果の返却には影響しない
         
-        logger.info(f"Analysis {analysis_id} completed: score={analysis_result['overall_score']}, severity={analysis_result['severity']}")
+        logger.info(f"Analysis {analysis_id} completed: score={ensemble_result.get('overall_score', 0)}, severity={ensemble_result.get('severity', 'MEDIUM')}")
         
         return analysis_data
     except HelmException:

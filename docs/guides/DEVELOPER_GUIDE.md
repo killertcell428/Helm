@@ -159,7 +159,10 @@ Dev/
 - **`services/`**: ビジネスロジックを実装するサービス層
   - `google_meet.py`: Google Meet議事録の取得とパース
   - `google_chat.py`: Google Chatメッセージの取得とパース
-  - `llm_service.py`: LLM統合（Vertex AI / Gemini）のラッパー
+  - `analyzer.py`: ルールベース分析（安全側のベースライン）
+  - `multi_view_analyzer.py`: マルチ視点LLM分析（4つのロール視点で評価）
+  - `ensemble_scoring.py`: アンサンブルスコアリング（ルールベース + LLM結果の統合）
+  - `llm_service.py`: LLM統合（Gemini / Gen AI SDK）のラッパー
   - `scoring.py`: スコアリングロジック
   - `escalation_engine.py`: エスカレーション判断ロジック
 - **`utils/`**: 共通ユーティリティ
@@ -403,12 +406,17 @@ logger.error("エラーが発生しました", exc_info=True)
     "meeting_id": str,
     "chat_id": Optional[str],
     "findings": List[Dict[str, Any]],
-    "score": int,
+    "score": int,  # アンサンブル後の最終スコア
     "severity": str,
+    "urgency": str,
     "explanation": str,
     "is_llm_generated": bool,
     "llm_status": str,
-    "llm_model": Optional[str]
+    "llm_model": Optional[str],
+    # マルチ視点評価結果
+    "multi_view": Optional[List[Dict[str, Any]]],  # 各ロールの評価結果
+    # アンサンブル結果
+    "ensemble": Optional[Dict[str, Any]]  # 統合結果
 }
 ```
 
@@ -437,18 +445,127 @@ logger.error("エラーが発生しました", exc_info=True)
 
 同様に `services/google_chat.py` を参照してください。
 
-### Vertex AI統合の方法
+### LLM統合の方法（Gemini / Gen AI SDK）
 
-1. **Vertex AI APIの有効化**
-   - Google Cloud ConsoleでVertex AI APIを有効化
-   - サービスアカウントに `roles/aiplatform.user` ロールを付与
+1. **Google API Keyの取得**
+   - [Google AI Studio](https://makersuite.google.com/app/apikey) でAPIキーを発行
+   - 環境変数 `GOOGLE_API_KEY` に設定
 
 2. **LLMサービスの使用**
    - `services/llm_service.py` を使用
    - `LLMService.analyze_structure()` で構造的問題検知
    - `LLMService.generate_tasks()` でタスク生成
+   - デフォルトモデル: `models/gemini-2.0-flash-001`
 
 詳細は [Vertex AI設定ガイド](./backend/VERTEX_AI_SETUP.md) を参照してください。
+
+### 評価システムの実装
+
+Helmは、**マルチ視点評価システム**を採用しています。このシステムは、ルールベース分析とマルチ視点LLM分析をアンサンブルして、より精度の高い評価を実現します。
+
+#### 1. ルールベース分析（StructureAnalyzer）
+
+定量的な指標に基づいて構造的問題を検知します：
+
+```python
+from services import StructureAnalyzer
+
+analyzer = StructureAnalyzer(use_vertex_ai=False, scoring_service=scoring_service)
+rule_result = analyzer.analyze(meeting_data, chat_data)
+```
+
+**検出される指標:**
+- KPI下方修正回数
+- 撤退/ピボット議論の有無
+- 判断集中率（最も多く発言した人の発言数 / 総発言数）
+- 反対意見の無視（チャットで反対意見があるが、会議で反映されていない）
+
+#### 2. マルチ視点LLM分析（MultiRoleLLMAnalyzer）
+
+同じデータを4つの異なる視点からLLMで評価します：
+
+```python
+from services import MultiRoleLLMAnalyzer, LLMService
+
+llm_service = LLMService()
+multi_view_analyzer = MultiRoleLLMAnalyzer(llm_service=llm_service)
+role_results = multi_view_analyzer.analyze_with_roles(
+    meeting_data=meeting_data,
+    chat_data=chat_data,
+    materials_data=materials_data
+)
+```
+
+**評価ロール:**
+- `executive` (重み: 0.4): 経営者視点（全社リスク・戦略妥当性）
+- `corp_planning` (重み: 0.3): 経営企画視点（KPI・ポートフォリオ・撤退/投資判断）
+- `staff` (重み: 0.2): 現場視点（実行可能性・現場負荷）
+- `governance` (重み: 0.1): ガバナンス視点（報告遅延・隠れたリスク・コンプライアンス）
+
+各ロールは専用のプロンプト（`AnalysisPromptBuilder.build_for_role()`）を使用し、それぞれの立場から構造的リスクを評価します。
+
+#### 3. アンサンブルスコアリング（EnsembleScoringService）
+
+ルールベース分析結果とマルチ視点LLM分析結果を統合します：
+
+```python
+from services import EnsembleScoringService
+
+ensemble_service = EnsembleScoringService()
+ensemble_result = ensemble_service.combine(
+    rule_result=rule_result,
+    role_results=role_results
+)
+```
+
+**統合ロジック:**
+- **スコア計算**: `最終スコア = 0.6 × ルールベーススコア + 0.4 × LLM平均スコア`
+- **重要度・緊急度**: ルールベースと各ロールの結果のうち、最も強い（安全側）を採用
+- **説明文**: ルールベースの説明 + 主要ロール（Executive, Corp Planning）のコメント
+
+#### 4. 実装例
+
+`main.py` の `/api/analyze` エンドポイントでは、以下のように実装されています：
+
+```python
+# ルールベース分析（常に実行）
+rule_result = analyzer.analyze(meeting_parsed, chat_parsed)
+
+# マルチ視点LLM分析（LLM利用可否は内部で判定）
+multi_view_results = multi_view_analyzer.analyze_with_roles(
+    meeting_data=meeting_parsed,
+    chat_data=chat_parsed,
+    materials_data=material_data,
+)
+
+# アンサンブルスコアリング
+ensemble_result = ensemble_scoring_service.combine(
+    rule_result=rule_result,
+    role_results=multi_view_results,
+)
+```
+
+#### 5. カスタマイズ
+
+**ロールの追加・変更:**
+
+```python
+from services import MultiRoleLLMAnalyzer, RoleConfig
+
+custom_roles = [
+    RoleConfig(role_id="executive", weight=0.5),
+    RoleConfig(role_id="corp_planning", weight=0.3),
+    RoleConfig(role_id="staff", weight=0.2),
+]
+multi_view_analyzer = MultiRoleLLMAnalyzer(
+    llm_service=llm_service,
+    roles=custom_roles
+)
+```
+
+**アンサンブル重みの変更:**
+
+`EnsembleScoringService.combine()` メソッド内の重み付け（現在は `0.6 × ルールベース + 0.4 × LLM`）を変更することで、ルールベースとLLMのバランスを調整できます。
 
 ### モックデータの使用方法
 

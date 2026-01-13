@@ -180,7 +180,7 @@ Google Chatログを取り込み、パース処理を実行します。
 
 **POST /api/analyze**
 
-会議データとチャットデータから構造的問題を検知します。Vertex AI / Geminiを使用したLLM分析と、ルールベース分析の両方をサポートします。
+会議データとチャットデータから構造的問題を検知します。**マルチ視点評価システム**により、ルールベース分析とマルチ視点LLM分析（4つのロール視点）をアンサンブルして、より精度の高い評価を実現します。
 
 **リクエストボディ:**
 ```json
@@ -219,15 +219,93 @@ Google Chatログを取り込み、パース処理を実行します。
   "scores": {
     "B1_正当化フェーズ": 75
   },
-  "score": 75,
+  "score": 69,
   "severity": "HIGH",
-  "urgency": "MEDIUM",
-  "explanation": "現在の会議構造は「正当化フェーズ」に入っています...",
+  "urgency": "HIGH",
+  "explanation": "【重要度: MEDIUM / 緊急度: HIGH】\n\nリスク認識から報告までの遅延が検出されました...",
   "created_at": "2025-01-20T10:00:00",
   "status": "completed",
   "is_llm_generated": true,
   "llm_status": "success",
-  "llm_model": "gemini-3.0-pro",
+  "llm_model": "models/gemini-2.0-flash-001",
+  "multi_view": [
+    {
+      "role_id": "executive",
+      "weight": 0.4,
+      "overall_score": 75,
+      "severity": "HIGH",
+      "urgency": "MEDIUM",
+      "explanation": "KPI悪化が継続しているにも関わらず、計画維持の意思決定がなされており...",
+      "analysis": { ... }
+    },
+    {
+      "role_id": "corp_planning",
+      "weight": 0.3,
+      "overall_score": 75,
+      "severity": "HIGH",
+      "urgency": "HIGH",
+      "explanation": "KPI悪化にも関わらず計画維持の決定は、構造的なリスクを示唆します...",
+      "analysis": { ... }
+    },
+    {
+      "role_id": "staff",
+      "weight": 0.2,
+      "overall_score": 75,
+      "severity": "HIGH",
+      "urgency": "HIGH",
+      "explanation": "KPIの悪化が続いているにも関わらず、計画の維持が決定され...",
+      "analysis": { ... }
+    },
+    {
+      "role_id": "governance",
+      "weight": 0.1,
+      "overall_score": 75,
+      "severity": "HIGH",
+      "urgency": "MEDIUM",
+      "explanation": "KPI悪化が継続しているにも関わらず、現状維持の判断が優先されています...",
+      "analysis": { ... }
+    }
+  ],
+  "ensemble": {
+    "overall_score": 69,
+    "severity": "HIGH",
+    "urgency": "HIGH",
+    "reasons": [
+      "【重要度: MEDIUM / 緊急度: HIGH】\n\nリスク認識から報告までの遅延が検出されました...",
+      "[executive] KPI悪化が継続しているにも関わらず、計画維持の意思決定がなされており...",
+      "[corp_planning] KPI悪化にも関わらず計画維持の決定は、構造的なリスクを示唆します..."
+    ],
+    "contributing_roles": [
+      {
+        "role_id": "executive",
+        "weight": 0.4,
+        "overall_score": 75,
+        "severity": "HIGH",
+        "urgency": "MEDIUM"
+      },
+      {
+        "role_id": "corp_planning",
+        "weight": 0.3,
+        "overall_score": 75,
+        "severity": "HIGH",
+        "urgency": "HIGH"
+      },
+      {
+        "role_id": "staff",
+        "weight": 0.2,
+        "overall_score": 75,
+        "severity": "HIGH",
+        "urgency": "HIGH"
+      },
+      {
+        "role_id": "governance",
+        "weight": 0.1,
+        "overall_score": 75,
+        "severity": "HIGH",
+        "urgency": "MEDIUM"
+      }
+    ]
+  },
   "output_file": {
     "filename": "analysis_123.json",
     "file_id": "analysis_123",
@@ -237,14 +315,33 @@ Google Chatログを取り込み、パース処理を実行します。
 ```
 
 **レスポンスフィールドの説明:**
-- `is_llm_generated`: LLM（Vertex AI）を使用して生成されたかどうか（`true`/`false`）
-- `llm_status`: LLMの状態（`success`, `mock_fallback`, `error`など）
-- `llm_model`: 使用されたLLMモデル名（例: `gemini-3.0-pro`）
+- `score`: アンサンブル後の最終スコア（0-100点）。`0.6 × ルールベーススコア + 0.4 × LLM平均スコア`で計算
+- `severity`, `urgency`: ルールベースと各ロールの結果のうち、最も強い（安全側）を採用
+- `is_llm_generated`: マルチ視点LLM分析が実行されたかどうか（`true`/`false`）
+- `llm_status`: LLMの状態（`success`, `disabled`, `error`など）
+- `llm_model`: 使用されたLLMモデル名（例: `models/gemini-2.0-flash-001`）
+- `multi_view`: マルチ視点LLM分析の結果。4つのロール（Executive, Corp Planning, Staff, Governance）の評価結果を含む
+  - `role_id`: ロールID
+  - `weight`: ロールの重み（アンサンブル時に使用）
+  - `overall_score`: そのロール視点でのスコア（0-100点）
+  - `severity`, `urgency`: そのロール視点での重要度・緊急度
+  - `explanation`: そのロール視点での説明文
+  - `analysis`: そのロール視点での完全な分析結果（`findings`を含む）
+- `ensemble`: アンサンブルスコアリングの結果
+  - `overall_score`: アンサンブル後の最終スコア
+  - `severity`, `urgency`: アンサンブル後の重要度・緊急度
+  - `reasons`: 統合された理由文（ルールベース + 主要ロールのコメント）
+  - `contributing_roles`: 各ロールの貢献度情報
 - `output_file`: 分析結果が保存されたファイル情報（オプション）
+
+**評価システムの動作:**
+1. **ルールベース分析**: 定量的指標（KPI下方修正回数、撤退議論の有無、判断集中率など）に基づいて構造的問題を検知
+2. **マルチ視点LLM分析**: 同じデータを4つの異なる視点（Executive, Corp Planning, Staff, Governance）からLLMで評価
+3. **アンサンブルスコアリング**: ルールベース結果とLLM結果を統合して最終スコアを決定
 
 **注意:**
 - `chat_id`と`material_id`はオプションです
-- LLM統合が有効でない場合、ルールベース分析にフォールバックします
+- LLM統合が無効な場合（`USE_LLM=false` または `GOOGLE_API_KEY`未設定）、ルールベース分析のみが実行されます（`multi_view`は空配列）
 - 分析結果は自動的にJSONファイルとして保存されます（`outputs/`ディレクトリ）
 
 **エラーレスポンス:**

@@ -82,7 +82,8 @@ class LLMService:
         self,
         meeting_data: Dict[str, Any],
         chat_data: Optional[Dict[str, Any]] = None,
-        materials_data: Optional[Dict[str, Any]] = None
+        materials_data: Optional[Dict[str, Any]] = None,
+        role_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         構造的問題を分析
@@ -102,8 +103,16 @@ class LLMService:
             result["_llm_status"] = "disabled"
             return result
         
-        # プロンプトを構築
-        prompt = AnalysisPromptBuilder.build(meeting_data, chat_data, materials_data)
+        # プロンプトを構築（ロール別 or 共通）
+        if role_id:
+            prompt = AnalysisPromptBuilder.build_for_role(
+                meeting_data=meeting_data,
+                chat_data=chat_data,
+                materials_data=materials_data,
+                role_id=role_id,
+            )
+        else:
+            prompt = AnalysisPromptBuilder.build(meeting_data, chat_data, materials_data)
         
         # LLM APIを呼び出し
         response_text = self._call_llm(
