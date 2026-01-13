@@ -960,9 +960,13 @@ async def analyze(request: AnalyzeRequest):
         try:
             output_file_info = output_service.save_analysis_result(analysis_id, analysis_result)
             analysis_data["output_file"] = output_file_info
+            # LogRecordの予約キーである"filename"はextraで上書きできないため、別キー名を使用する
             logger.info(
                 f"Analysis result saved to file: {output_file_info.get('filename')}",
-                extra={"analysis_id": analysis_id, "filename": output_file_info.get('filename')}
+                extra={
+                    "analysis_id": analysis_id,
+                    "output_filename": output_file_info.get("filename")
+                }
             )
         except Exception as e:
             error_type = type(e).__name__

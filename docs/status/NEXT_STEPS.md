@@ -154,6 +154,11 @@
 - ドキュメント生成内容の改善
 - エラーハンドリングのテストと確認
 
+### ✅ LLM連携（Gemini / Gen AI SDK）の確立
+- Gen AI SDK（`google.generativeai`）経由での Gemini 呼び出しを実APIとして採用
+- デフォルトモデルを `models/gemini-2.0-flash-001` とし、`USE_LLM=true` + `GOOGLE_API_KEY` で本番モード動作
+- LLM失敗時はモックに自動フォールバック（`llm_status=mock_fallback`）する設計を維持
+
 ## 次のアクション推奨
 
 ### 優先度: 高 🔴

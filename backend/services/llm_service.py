@@ -37,7 +37,9 @@ class LLMService:
         """
         self.project_id = project_id or os.getenv("GOOGLE_CLOUD_PROJECT_ID") or config.GOOGLE_CLOUD_PROJECT_ID
         self.location = location or os.getenv("VERTEX_AI_LOCATION", "us-central1")
-        self.model_name = model_name or os.getenv("LLM_MODEL", "gemini-1.5-flash-002")
+        # Gen AI SDK用のモデル名（models/プレフィックス付き、利用可能な最新安定版）
+        # デフォルト: models/gemini-2.0-flash-001 (Stable version)
+        self.model_name = model_name or os.getenv("LLM_MODEL", "models/gemini-2.0-flash-001")
         self.use_llm = os.getenv("USE_LLM", "false").lower() == "true"
         self.max_retries = int(os.getenv("LLM_MAX_RETRIES", "3"))
         self.timeout = int(os.getenv("LLM_TIMEOUT", "60"))
@@ -220,7 +222,7 @@ class LLMService:
         model_name: Optional[str] = None
     ) -> Optional[str]:
         """
-        LLM APIを呼び出し
+        LLM APIを呼び出し（Gen AI SDK専用）
         
         Args:
             prompt: プロンプト
@@ -232,54 +234,24 @@ class LLMService:
         """
         model = model_name or self.model_name
         
-        # まず Gen AI SDK（google-generativeai）を優先的に利用
-        if self._genai_available:
-            try:
-                gen_model = genai.GenerativeModel(model)
-                # Gen AI SDK側はレスポンス形式を直接制御しづらいが、まずはテキスト前提で扱う
-                resp = gen_model.generate_content(prompt)
-                if not resp or not getattr(resp, "text", None):
-                    logger.warning("Gen AI SDKからの空レスポンス")
-                else:
-                    logger.info(f"Gen AI SDK呼び出し成功: model={model}")
-                    return resp.text
-            except Exception as e:
-                error_type = type(e).__name__
-                logger.error(
-                    f"Gen AI SDK呼び出しエラー: {e}",
-                    extra={
-                        "error_type": error_type,
-                        "model": model,
-                        "project_id": self.project_id,
-                        "location": self.location
-                    },
-                    exc_info=True
-                )
-                # Gen AI SDKで失敗した場合は、Vertex AI SDK経由にフォールバック
+        # Gen AI SDK（google-generativeai）のみを使用
+        if not self._genai_available:
+            logger.warning("Gen AI SDKが利用できません（GOOGLE_API_KEY未設定またはgoogle-generativeai未インストール）")
+            return None
         
-        # Gen AI SDKが使えない場合、または失敗した場合は Vertex AI SDK（vertexai）にフォールバック
+        # モデル名をGen AI SDK用に調整（models/プレフィックスを追加）
+        genai_model_name = model
+        if not genai_model_name.startswith("models/"):
+            # プレフィックスがない場合は追加
+            genai_model_name = f"models/{genai_model_name}"
+            logger.info(f"モデル名を調整: {model} → {genai_model_name}")
+        
         for attempt in range(self.max_retries):
             try:
-                import vertexai
-                from vertexai.generative_models import GenerativeModel
+                start_time = time.time()
                 
-                # Vertex AIの初期化（初回のみ）
-                if not hasattr(self, '_aiplatform_initialized'):
-                    vertexai.init(project=self.project_id, location=self.location)
-                    self._aiplatform_initialized = True
-                
-                # モデルの選択（最新モデルを優先）
-                # gemini-1.5-pro が利用できない場合は gemini-pro にフォールバック
-                try:
-                    generative_model = GenerativeModel(model)
-                except Exception as e:
-                    logger.warning(f"モデル {model} の初期化失敗: {e}。gemini-pro にフォールバック")
-                    model = "gemini-pro"
-                    try:
-                        generative_model = GenerativeModel(model)
-                    except Exception as e2:
-                        logger.error(f"フォールバックモデル gemini-pro も失敗: {e2}")
-                        raise
+                # Gen AI SDKでモデルを初期化
+                gen_model = genai.GenerativeModel(genai_model_name)
                 
                 # 生成設定
                 generation_config = {
@@ -293,46 +265,41 @@ class LLMService:
                     generation_config["response_mime_type"] = "application/json"
                 
                 # LLM API呼び出し
-                start_time = time.time()
-                response = generative_model.generate_content(
+                resp = gen_model.generate_content(
                     prompt,
                     generation_config=generation_config
                 )
                 elapsed_time = time.time() - start_time
                 
-                if not response or not response.text:
-                    logger.warning(f"LLM APIからの空レスポンス（試行 {attempt + 1}/{self.max_retries}）")
+                if not resp:
+                    logger.warning(f"Gen AI SDKからの空レスポンス（試行 {attempt + 1}/{self.max_retries}）")
                     if attempt < self.max_retries - 1:
                         time.sleep(2 ** attempt)  # 指数バックオフ
                         continue
                     return None
                 
-                logger.info(f"LLM API呼び出し成功: model={model}, elapsed={elapsed_time:.2f}s")
-                return response.text
+                # レスポンステキストを取得
+                response_text = getattr(resp, "text", None)
+                if not response_text:
+                    logger.warning(f"Gen AI SDKからのレスポンスにtext属性がありません（試行 {attempt + 1}/{self.max_retries}）")
+                    if attempt < self.max_retries - 1:
+                        time.sleep(2 ** attempt)
+                        continue
+                    return None
                 
-            except ImportError as e:
-                logger.error(
-                    f"Required library not installed: {e}",
-                    extra={
-                        "error_type": "ImportError",
-                        "model": model,
-                        "attempt": attempt + 1,
-                        "max_retries": self.max_retries
-                    },
-                    exc_info=True
-                )
-                return None
+                logger.info(f"Gen AI SDK呼び出し成功: model={genai_model_name}, elapsed={elapsed_time:.2f}s")
+                return response_text
+                
             except Exception as e:
                 error_type = type(e).__name__
                 logger.error(
-                    f"LLM API呼び出しエラー（試行 {attempt + 1}/{self.max_retries}）: {e}",
+                    f"Gen AI SDK呼び出しエラー（試行 {attempt + 1}/{self.max_retries}）: {e}",
                     extra={
                         "error_type": error_type,
-                        "model": model,
+                        "model": genai_model_name,
                         "attempt": attempt + 1,
                         "max_retries": self.max_retries,
-                        "project_id": self.project_id,
-                        "location": self.location
+                        "project_id": self.project_id
                     },
                     exc_info=True
                 )
@@ -342,7 +309,7 @@ class LLMService:
                     logger.info(f"Retrying after {delay:.2f} seconds...")
                     time.sleep(delay)
                     continue
-                logger.error(f"LLM API呼び出しが{self.max_retries}回失敗しました。フォールバックします。")
+                logger.error(f"Gen AI SDK呼び出しが{self.max_retries}回失敗しました。")
                 return None
         
         return None

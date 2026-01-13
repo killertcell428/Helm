@@ -30,6 +30,7 @@
 - ✅ WebSocket統合（リアルタイム進捗更新）
 - ✅ バックグラウンドタスク実行
 - ✅ ドキュメント生成内容の改善（詳細な分析結果を含む）
+ - ✅ LLM連携（Google Gemini / Gen AI SDK、本番モード）
 
 ### フロントエンド
 - ✅ Next.jsベースのUI
@@ -99,3 +100,15 @@
 - [WEEK2_PROGRESS.md](./WEEK2_PROGRESS.md) - 詳細な進捗記録
 - [NEXT_STEPS.md](./NEXT_STEPS.md) - 次のステップ候補
 - [DOCUMENTATION_INDEX.md](./DOCUMENTATION_INDEX.md) - 全ドキュメントのインデックス
+
+## LLM連携の最終構成（2025-01-13 時点）
+
+- **利用SDK**: Gen AI SDK (`google.generativeai`) ※将来的に `google.genai` への移行候補
+- **モデル**: `models/gemini-2.0-flash-001`（安定版 Flash）
+- **環境変数**:
+  - `USE_LLM=true`
+  - `GOOGLE_API_KEY=<Generative AI Studio で発行した API キー>`
+  - `LLM_MODEL=models/gemini-2.0-flash-001`（未設定時は同値をデフォルト使用）
+- **動作仕様**:
+  - LLM呼び出し成功時: `is_llm_generated=True`, `llm_status=success`, `llm_model=models/gemini-2.0-flash-001`
+  - 失敗時: 複数回リトライ後にモックへフォールバック（`is_llm_generated=False`, `llm_status=mock_fallback`）
