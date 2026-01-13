@@ -40,9 +40,19 @@ Helmは、組織の意思決定プロセスを監視し、構造的問題を検�
 │  │  └──────────────┘  └──────────────┘                │   │
 │  │                                                       │   │
 │  │  ┌──────────────┐  ┌──────────────┐                │   │
-│  │  │  Structure   │  │  Vertex AI   │                │   │
-│  │  │   Analyzer   │  │   Service    │                │   │
+│  │  │  Structure   │  │  LLM Service │                │   │
+│  │  │   Analyzer   │  │  (Vertex AI) │                │   │
 │  │  └──────────────┘  └──────────────┘                │   │
+│  │                                                       │   │
+│  │  ┌──────────────┐  ┌──────────────┐                │   │
+│  │  │  Scoring     │  │  Escalation   │                │   │
+│  │  │   Service    │  │   Engine      │                │   │
+│  │  └──────────────┘  └──────────────┘                │   │
+│  │                                                       │   │
+│  │  ┌──────────────┐                                    │   │
+│  │  │  Output      │                                    │   │
+│  │  │   Service     │                                    │   │
+│  │  └──────────────┘                                    │   │
 │  │                                                       │   │
 │  │  ┌──────────────┐  ┌──────────────┐                │   │
 │  │  │  Workspace   │  │  Google      │                │   │
@@ -88,10 +98,10 @@ Google Meet/Chat
 [構造化データ]
       │
       ▼
-[Structure Analyzer]
+[LLM Service]
       │
-      ├─→ [ルールベース分析] (現在)
-      └─→ [Vertex AI分析] (将来)
+      ├─→ [Vertex AI / Gemini分析] (実APIモード)
+      └─→ [ルールベース分析] (モックモード)
       │
       ▼
 [パターン検出]
@@ -103,8 +113,14 @@ Google Meet/Chat
       ▼
 [スコアリング & 説明生成]
       │
+      ├─→ [Scoring Service]
+      └─→ [LLM説明生成]
+      │
       ▼
-[アラート生成]
+[アラート生成 & 結果保存]
+      │
+      ├─→ [Output Service] (JSONファイル保存)
+      └─→ [レスポンス返却]
 ```
 
 ### 3. Executive呼び出しフロー
@@ -201,13 +217,28 @@ app/v0-helm-demo/
 ```
 backend/
 ├── main.py                 # メインAPI
+├── config.py               # アプリケーション設定
 ├── services/               # サービス層
 │   ├── google_meet.py      # Google Meet統合
 │   ├── google_chat.py      # Google Chat統合
-│   ├── analyzer.py         # 構造的問題検知
-│   ├── vertex_ai.py        # Vertex AI統合
+│   ├── analyzer.py         # 構造的問題検知（ルールベース）
+│   ├── llm_service.py      # LLM統合サービス（Vertex AI / Gemini）
+│   ├── vertex_ai.py        # Vertex AI統合（レガシー）
+│   ├── vertex_ai_real.py   # Vertex AI実装
+│   ├── scoring.py          # スコアリングサービス
+│   ├── escalation_engine.py # エスカレーション判断エンジン
 │   ├── google_workspace.py # Google Workspace統合
-│   └── google_drive.py     # Google Drive統合
+│   ├── google_drive.py     # Google Drive統合
+│   ├── output_service.py   # 出力サービス
+│   ├── prompts/            # LLMプロンプト
+│   │   ├── analysis_prompt.py
+│   │   └── task_generation_prompt.py
+│   └── evaluation/         # 評価パーサー
+│       └── parser.py
+├── utils/                  # ユーティリティ
+│   ├── logger.py           # ログ機能
+│   ├── exceptions.py       # カスタム例外
+│   └── error_notifier.py   # エラー通知
 ├── schemas/                # データスキーマ
 │   └── firestore.py       # Firestoreスキーマ定義
 └── requirements.txt        # 依存関係
@@ -223,10 +254,24 @@ backend/
 - チャットメッセージの取得とパース
 - リスク検出、エスカレーション検出、反対意見検出
 
+**LLMService**
+- Vertex AI / Gemini統合
+- 構造的問題検知（LLM分析）
+- タスク生成（LLM生成）
+- モックフォールバック
+
 **StructureAnalyzer**
-- ルールベース分析（現在）
-- Vertex AI分析（将来）
+- ルールベース分析（フォールバック用）
 - パターン検出とスコアリング
+
+**ScoringService**
+- スコアリングロジック
+- 定量評価基準の抽出
+
+**EscalationEngine**
+- エスカレーション判断
+- 責任モデルに基づくロール選択
+- エスカレーション理由生成
 
 **GoogleWorkspaceService**
 - 市場データリサーチ
@@ -239,14 +284,21 @@ backend/
 - ダウンロードURL生成
 - ファイル共有
 
+**OutputService**
+- 分析結果のJSONファイル保存
+- タスク生成結果のJSONファイル保存
+- 出力ファイルの管理
+
 ## API設計
 
 ### エンドポイント一覧
 
 | メソッド | エンドポイント | 説明 |
 |---------|--------------|------|
+| GET | `/` | ヘルスチェック |
 | POST | `/api/meetings/ingest` | 議事録取り込み |
 | POST | `/api/chat/ingest` | チャット取り込み |
+| POST | `/api/materials/ingest` | 資料取り込み |
 | POST | `/api/analyze` | 構造的問題検知 |
 | GET | `/api/analysis/{id}` | 分析結果取得 |
 | POST | `/api/escalate` | Executive呼び出し |
@@ -254,6 +306,10 @@ backend/
 | POST | `/api/execute` | AI自律実行開始 |
 | GET | `/api/execution/{id}` | 実行状態取得 |
 | GET | `/api/execution/{id}/results` | 実行結果取得 |
+| WebSocket | `/api/execution/{id}/ws` | 実行進捗のリアルタイム更新 |
+| GET | `/api/download/{file_id}` | ファイルダウンロードURL取得 |
+| GET | `/api/outputs` | 出力ファイル一覧取得 |
+| GET | `/api/outputs/{file_id}` | 出力ファイル取得 |
 
 ### データモデル
 
@@ -349,17 +405,23 @@ backend/
 
 ## セキュリティ
 
-### 認証・認可（将来実装）
+### 認証・認可
 
+**現在の実装:**
+- 認証不要（開発環境）
+- CORS設定により、指定されたオリジンのみアクセス可能
+
+**将来実装予定:**
 - Google OAuth2認証
 - サービスアカウント認証
 - ロールベースアクセス制御
 
 ### データ保護
 
-- 環境変数による機密情報管理
-- HTTPS通信
-- CORS設定
+- 環境変数による機密情報管理（`.env`ファイル）
+- HTTPS通信（本番環境）
+- CORS設定（`config.py`で設定）
+- エラーログに機密情報を含めない
 
 ## 拡張性
 
@@ -396,18 +458,66 @@ backend/
 
 ## 監視・ログ
 
-### ログレベル
+### ログ機能
 
+**実装済み:**
+- 構造化ログ（JSON形式）
+- リクエストID追跡（各リクエストに一意のIDを付与）
+- エラーログの詳細記録（スタックトレース含む）
+- エラー通知機能（`error_notifier.py`）
+
+**ログレベル:**
 - INFO: 通常の処理ログ
 - WARNING: 警告（API接続失敗等）
 - ERROR: エラー（例外発生等）
 
-### メトリクス（将来）
+**ログ出力先:**
+- 標準出力（開発環境）
+- ファイル出力（将来実装予定）
+- Cloud Logging（本番環境、将来実装予定）
+
+### メトリクス（将来実装予定）
 
 - APIレスポンス時間
 - エラー率
 - 分析実行時間
 - タスク実行時間
+- LLM API呼び出し回数・成功率
+
+## 最新の実装状況
+
+### 実装済み機能
+
+- ✅ LLM統合（Vertex AI / Gemini）
+  - 構造的問題検知（LLM分析）
+  - タスク生成（LLM生成）
+  - モックフォールバック
+- ✅ エラーハンドリングの改善
+  - カスタム例外クラス
+  - エラーID追跡
+  - ユーザーフレンドリーなエラーメッセージ
+- ✅ ログ機能の強化
+  - 構造化ログ
+  - リクエストID追跡
+  - エラー通知
+- ✅ 出力サービス
+  - 分析結果のJSONファイル保存
+  - タスク生成結果のJSONファイル保存
+- ✅ WebSocket統合
+  - 実行進捗のリアルタイム更新
+- ✅ 新規エンドポイント
+  - `/api/materials/ingest` - 資料取り込み
+  - `/api/download/{file_id}` - ファイルダウンロード
+  - `/api/outputs` - 出力ファイル一覧
+  - `/api/outputs/{file_id}` - 出力ファイル取得
+
+### 将来実装予定
+
+- ⏳ Firestore統合（データの永続化）
+- ⏳ 認証・認可機能
+- ⏳ レート制限
+- ⏳ メトリクス収集
+- ⏳ バックグラウンドタスクキュー（Celery等）
 
 ## 参考資料
 
@@ -415,4 +525,6 @@ backend/
 - [Next.js公式ドキュメント](https://nextjs.org/docs)
 - [Google Cloud API](https://cloud.google.com/apis)
 - [Vertex AI](https://cloud.google.com/vertex-ai)
+- [APIドキュメント](./backend/API_DOCUMENTATION.md)
+- [開発者ガイド](./DEVELOPER_GUIDE.md)
 

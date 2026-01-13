@@ -12,6 +12,8 @@ from typing import Dict, Any
 
 BASE_URL = "http://localhost:8000"
 
+from .utils_websocket import collect_execution_messages
+
 
 @pytest.fixture(scope="module")
 def server_check():
@@ -27,6 +29,7 @@ def server_check():
 class TestFullFlow:
     """完全なフローのエンドツーエンドテスト"""
     
+    @pytest.mark.e2e
     def test_complete_flow(self, server_check):
         """完全なフローのテスト: 議事録取り込み → 分析 → エスカレーション → 承認 → 実行 → 結果取得"""
         
@@ -142,6 +145,110 @@ class TestFullFlow:
         else:
             # エスカレーション条件を満たさない場合でも、フローは正常に動作していることを確認
             assert escalate_response.status_code == 422
+
+    @pytest.mark.e2e
+    @pytest.mark.websocket
+    def test_complete_flow_with_websocket_progress(self, server_check):
+        """
+        完全なフロー + WebSocket進捗確認のテスト
+        
+        - execute で execution_id を取得
+        - WebSocket に接続して progress/completed メッセージを受信
+        - progress が 0〜100 の範囲で増加していくことを確認
+        """
+        # まずは既存フローと同様に execute まで実行
+        meeting_response = requests.post(
+            f"{BASE_URL}/api/meetings/ingest",
+            json={
+                "meeting_id": "e2e_ws_meeting_001",
+                "metadata": {
+                    "meeting_name": "E2E WebSocketテスト会議",
+                    "date": "2025-01-20",
+                    "participants": ["CFO", "CEO"],
+                },
+            },
+        )
+        assert meeting_response.status_code == 200
+
+        chat_response = requests.post(
+            f"{BASE_URL}/api/chat/ingest",
+            json={
+                "chat_id": "e2e_ws_chat_001",
+                "metadata": {
+                    "channel_name": "E2E WebSocketテストチャンネル",
+                    "project_id": "e2e_ws_project",
+                },
+            },
+        )
+        assert chat_response.status_code == 200
+
+        analyze_response = requests.post(
+            f"{BASE_URL}/api/analyze",
+            json={
+                "meeting_id": "e2e_ws_meeting_001",
+                "chat_id": "e2e_ws_chat_001",
+            },
+        )
+        assert analyze_response.status_code == 200
+        analysis_data = analyze_response.json()
+        analysis_id = analysis_data["analysis_id"]
+
+        escalate_response = requests.post(
+            f"{BASE_URL}/api/escalate",
+            json={"analysis_id": analysis_id},
+        )
+
+        if escalate_response.status_code != 200:
+            # エスカレーション条件を満たさない場合や分析が見つからない場合でも、
+            # フロー自体は正常に動作しているとみなし、4xx を許容する
+            assert escalate_response.status_code in (404, 422)
+            return
+
+        escalation_data = escalate_response.json()
+        escalation_id = escalation_data["escalation_id"]
+
+        approve_response = requests.post(
+            f"{BASE_URL}/api/approve",
+            json={
+                "escalation_id": escalation_id,
+                "decision": "approve",
+            },
+        )
+        assert approve_response.status_code == 200
+        approval_data = approve_response.json()
+        approval_id = approval_data["approval_id"]
+
+        execute_response = requests.post(
+            f"{BASE_URL}/api/execute",
+            json={"approval_id": approval_id},
+        )
+        assert execute_response.status_code == 200
+        execution_data = execute_response.json()
+        execution_id = execution_data["execution_id"]
+
+        # WebSocket で進捗を収集
+        progress_messages, completed_messages = collect_execution_messages(execution_id, timeout_seconds=30)
+
+        # progress メッセージが少なくとも1件以上あること
+        assert len(progress_messages) > 0
+
+        # progress が 0〜100 の範囲にあり、概ね増加方向であることを確認
+        progresses = [msg.get("data", {}).get("progress", 0) for msg in progress_messages]
+        assert all(0 <= p <= 100 for p in progresses)
+        # 単純チェック: 最大値が 50 以上であること（十分進行していること）
+        assert max(progresses) >= 50
+
+        # completed メッセージが1件以上あること
+        assert len(completed_messages) >= 1
+        completed_statuses = [msg.get("data", {}).get("status") for msg in completed_messages]
+        assert "completed" in completed_statuses
+
+        # 結果APIでも completed が反映されていることを確認
+        results_response = requests.get(f"{BASE_URL}/api/execution/{execution_id}/results")
+        assert results_response.status_code == 200
+        results_data = results_response.json()
+        assert results_data.get("execution_id") == execution_id
+        assert isinstance(results_data.get("results"), list)
     
     def test_flow_with_meeting_only(self, server_check):
         """会議データのみでのフローテスト"""

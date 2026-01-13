@@ -80,27 +80,167 @@ class GoogleMeetService:
             service = build('meet', 'v2', credentials=credentials)
             
             try:
-                # 会議情報を取得
-                # 注意: Google Meet API v2では、会議コードまたは会議名を使用
-                # meeting_idが会議コードの場合、会議情報を取得
-                meeting_info = None
-                transcript_text = ""
+                # Google Meet API v2を使用して議事録を取得
+                # 注意: 議事録の取得には、会議が終了している必要があります
+                # また、会議コードから会議レコードを取得する必要があります
                 
-                # 会議コードから会議情報を取得を試みる
+                transcript_text = ""
+                meeting_info = None
+                
+                # 会議コードから会議情報を取得
+                # Google Meet API v2では、会議コード（meeting code）から会議レコードを取得する必要があります
+                # まず、会議スペース（space）を取得または作成する必要がある場合があります
+                
                 try:
-                    # 会議コードから会議名を取得
-                    # 注意: Google Meet API v2の実際のエンドポイントは異なる可能性があります
-                    # ここでは一般的な実装を示します
+                    # 会議コードから会議レコードを取得
+                    # Google Meet API v2では、会議コードから直接会議レコードを取得する方法が限定的です
+                    # 会議が終了した後に会議レコードが生成されます
                     
-                    # 会議の議事録を取得
-                    # 注意: 実際のAPIエンドポイントは、Google Meet API v2のドキュメントを参照してください
-                    # 議事録の取得には、会議が終了している必要があります
+                    conference_record_name = None
                     
-                    # 暫定的な実装: 会議情報を取得
-                    # 実際のAPIエンドポイントは、Google Meet API v2の仕様に従って実装してください
-                    logger.warning(f"Google Meet API: 議事録取得機能は、Google Meet API v2の仕様に基づいて実装が必要です")
-                    logger.warning(f"Google Meet API: 現在はモックモードにフォールバックします")
-                    return self._get_mock_transcript(meeting_id)
+                    # 会議IDが会議レコードIDの形式（conferenceRecords/{record_id}）の場合
+                    if meeting_id.startswith("conferenceRecords/"):
+                        conference_record_name = meeting_id
+                    else:
+                        # 会議コードから会議レコードを検索
+                        # 会議レコードをリストして、該当する会議を探す
+                        # 注意: この方法は効率的ではないため、実際の実装では会議コードと会議レコードのマッピングが必要です
+                        try:
+                            # 最近の会議レコードをリスト（最大100件）
+                            # 実際の実装では、フィルタリングやページネーションを使用することを推奨
+                            conference_records_response = service.conferenceRecords().list(
+                                pageSize=100
+                            ).execute()
+                            
+                            conference_records = conference_records_response.get('conferenceRecords', [])
+                            
+                            # 会議コードに一致する会議レコードを検索
+                            # 注意: 会議レコードには会議コードが直接含まれていない可能性があります
+                            # 実際の実装では、会議コードと会議レコードのマッピングテーブルが必要です
+                            
+                            # 暫定的な実装: 最初の会議レコードを使用（実際の実装では適切な検索ロジックが必要）
+                            if conference_records:
+                                # 会議コードが会議レコード名に含まれているか確認
+                                for record in conference_records:
+                                    record_name = record.get('name', '')
+                                    # 会議コードが会議レコード名に含まれている場合（暫定的な検索）
+                                    if meeting_id in record_name or record_name.endswith(meeting_id):
+                                        conference_record_name = record_name
+                                        break
+                                
+                                # 一致する会議レコードが見つからない場合、最新の会議レコードを使用
+                                if not conference_record_name and conference_records:
+                                    logger.warning(f"Google Meet API: 会議コード '{meeting_id}' に一致する会議レコードが見つかりませんでした")
+                                    logger.warning(f"Google Meet API: 最新の会議レコードを使用します（暫定的な実装）")
+                                    conference_record_name = conference_records[0].get('name')
+                            else:
+                                logger.warning(f"Google Meet API: 会議レコードが見つかりませんでした")
+                                logger.warning(f"Google Meet API: 会議が終了していないか、会議レコードが生成されていない可能性があります")
+                                logger.warning(f"Google Meet API: モックモードにフォールバックします")
+                                return self._get_mock_transcript(meeting_id)
+                                
+                        except HttpError as e:
+                            # 会議レコードのリスト取得に失敗した場合
+                            status = e.resp.status
+                            if status in [400, 403, 404]:
+                                logger.warning(f"Google Meet API: 会議レコードの取得に失敗しました: {e}")
+                                logger.warning(f"Google Meet API: モックモードにフォールバックします")
+                                return self._get_mock_transcript(meeting_id)
+                            else:
+                                raise
+                    
+                    if not conference_record_name:
+                        logger.warning(f"Google Meet API: 会議レコード名を取得できませんでした")
+                        logger.warning(f"Google Meet API: モックモードにフォールバックします")
+                        return self._get_mock_transcript(meeting_id)
+                    
+                    # 会議レコードから議事録を取得
+                    # 会議レコードには複数の議事録が含まれる可能性があります
+                    # 最新の議事録を取得するか、すべての議事録を取得します
+                    
+                    # 議事録をリスト
+                    transcripts_response = service.conferenceRecords().transcripts().list(
+                        parent=conference_record_name
+                    ).execute()
+                    
+                    transcripts = transcripts_response.get('transcripts', [])
+                    
+                    if not transcripts:
+                        logger.warning(f"Google Meet API: 会議レコード '{conference_record_name}' に議事録が見つかりませんでした")
+                        logger.warning(f"Google Meet API: 会議が終了していないか、議事録が生成されていない可能性があります")
+                        logger.warning(f"Google Meet API: モックモードにフォールバックします")
+                        return self._get_mock_transcript(meeting_id)
+                    
+                    # 最新の議事録を取得（最初の議事録を使用）
+                    latest_transcript = transcripts[0]
+                    transcript_name = latest_transcript.get('name')
+                    
+                    # 議事録の詳細を取得
+                    transcript_detail = service.conferenceRecords().transcripts().get(
+                        name=transcript_name
+                    ).execute()
+                    
+                    # 議事録エントリを取得
+                    transcript_entries_response = service.conferenceRecords().transcripts().entries().list(
+                        parent=transcript_name
+                    ).execute()
+                    
+                    entries = transcript_entries_response.get('transcriptEntries', [])
+                    
+                    # 議事録テキストを構築
+                    transcript_lines = []
+                    for entry in entries:
+                        # エントリの種類に応じて処理
+                        # Google Meet API v2の議事録エントリの構造に基づく
+                        if 'userEvents' in entry:
+                            # ユーザーイベント（発言など）
+                            for event in entry['userEvents']:
+                                if 'message' in event:
+                                    message = event['message']
+                                    display_name = message.get('displayName', 'Unknown')
+                                    text_content = message.get('text', '')
+                                    if text_content:
+                                        transcript_lines.append(f"{display_name}: {text_content}")
+                        elif 'content' in entry:
+                            # コンテンツエントリ（テキスト）
+                            content = entry['content']
+                            if isinstance(content, str):
+                                transcript_lines.append(content)
+                            elif isinstance(content, dict):
+                                # 構造化されたコンテンツの場合
+                                text = content.get('text', '')
+                                if text:
+                                    transcript_lines.append(text)
+                        elif 'text' in entry:
+                            # テキストエントリ（後方互換性）
+                            transcript_lines.append(entry['text'])
+                    
+                    transcript_text = "\n".join(transcript_lines)
+                    
+                    # 会議情報を取得
+                    conference_record = service.conferenceRecords().get(
+                        name=conference_record_name
+                    ).execute()
+                    
+                    meeting_info = {
+                        "conference_record_name": conference_record_name,
+                        "start_time": conference_record.get('startTime'),
+                        "end_time": conference_record.get('endTime'),
+                    }
+                    
+                    logger.info(f"Google Meet API: 議事録を取得しました（会議レコード: {conference_record_name}、エントリ数: {len(entries)}）")
+                    
+                    return {
+                        "meeting_id": meeting_id,
+                        "transcript": transcript_text,
+                        "metadata": {
+                            **meeting_info,
+                            "transcript_count": len(transcripts),
+                            "entry_count": len(entries),
+                            "created_at": datetime.now().isoformat()
+                        },
+                        "created_at": datetime.now().isoformat()
+                    }
                     
                 except HttpError as e:
                     status = e.resp.status

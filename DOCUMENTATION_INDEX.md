@@ -6,22 +6,27 @@ Helmプロジェクトの主要ドキュメント一覧です。
 
 ### プロジェクト概要
 - [README.md](./README.md) - プロジェクトの概要とクイックスタート
-- [QUICKSTART.md](./QUICKSTART.md) - 初心者向け起動手順
+- [docs/guides/QUICKSTART.md](./docs/guides/QUICKSTART.md) - 初心者向け起動手順
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - システム全体の設計
 
 ### 進捗・実装状況
-- [WEEK2_SUMMARY.md](./WEEK2_SUMMARY.md) - Week 2の実装サマリー ⭐ **最新**
-- [WEEK2_PROGRESS.md](./WEEK2_PROGRESS.md) - Week 2の詳細な進捗記録
-- [WEEK2_PLAN.md](./WEEK2_PLAN.md) - Week 2の実装計画
-- [PROJECT_STATUS.md](./PROJECT_STATUS.md) - プロジェクト状況 ⭐ **最新**
-- [NEXT_STEPS.md](./NEXT_STEPS.md) - 次のステップ候補 ⭐ **最新**
-- [CLEANUP_SUMMARY.md](./CLEANUP_SUMMARY.md) - ファイル整理サマリー
+- [docs/status/WEEK2_SUMMARY.md](./docs/status/WEEK2_SUMMARY.md) - Week 2の実装サマリー ⭐ **最新**
+- [docs/status/WEEK2_PROGRESS.md](./docs/status/WEEK2_PROGRESS.md) - Week 2の詳細な進捗記録
+- [docs/status/WEEK2_PLAN.md](./docs/status/WEEK2_PLAN.md) - Week 2の実装計画
+- [docs/status/PROJECT_STATUS.md](./docs/status/PROJECT_STATUS.md) - プロジェクト状況 ⭐ **最新**
+- [docs/status/NEXT_STEPS.md](./docs/status/NEXT_STEPS.md) - 次のステップ候補 ⭐ **最新**
+- [docs/status/CLEANUP_SUMMARY.md](./docs/status/CLEANUP_SUMMARY.md) - ファイル整理サマリー
 
 ### 実装詳細
 - [backend/REAL_DATA_IMPLEMENTATION.md](./backend/REAL_DATA_IMPLEMENTATION.md) - 実データ実装の詳細
 - [backend/API_DOCUMENTATION.md](./backend/API_DOCUMENTATION.md) - API仕様書
 
 ## 🔧 セットアップガイド
+
+### 開発者向けガイド
+- [docs/guides/DEVELOPER_GUIDE.md](./docs/guides/DEVELOPER_GUIDE.md) - 開発者向けガイド
+- [docs/guides/USER_GUIDE.md](./docs/guides/USER_GUIDE.md) - ユーザーガイド
+- [docs/guides/GIT_SETUP_GUIDE.md](./docs/guides/GIT_SETUP_GUIDE.md) - Gitセットアップガイド
 
 ### Google API統合
 - [backend/QUICK_SETUP_PERSONAL_DRIVE.md](./backend/QUICK_SETUP_PERSONAL_DRIVE.md) - 個人アカウントでのセットアップ（推奨）
@@ -39,6 +44,24 @@ Helmプロジェクトの主要ドキュメント一覧です。
   - `Helm_3cases_PDCA.md` - 3ケースのPDCAサイクル
   - `Helm_final_3months_roles.md` - 3ヶ月後のロール設計
   - `Helm_parsers_3cases.md` - 3ケースのパーサー設計
+
+## 📊 レポート・テスト結果
+
+### テストレポート
+- [docs/reports/BROWSER_TEST_REPORT_LLM_INTEGRATION.md](./docs/reports/BROWSER_TEST_REPORT_LLM_INTEGRATION.md) - LLM統合テストレポート
+- [docs/reports/BROWSER_TEST_REPORT_LLM_TRUE.md](./docs/reports/BROWSER_TEST_REPORT_LLM_TRUE.md) - LLM実装テストレポート
+- [docs/reports/BROWSER_TEST_REPORT_UI_UX.md](./docs/reports/BROWSER_TEST_REPORT_UI_UX.md) - UI/UXテストレポート
+- [docs/reports/TEST_AND_ERROR_HANDLING_SUMMARY.md](./docs/reports/TEST_AND_ERROR_HANDLING_SUMMARY.md) - テストとエラーハンドリングサマリー
+
+### LLM関連レポート
+- [docs/reports/LLM_DEBUG_REPORT.md](./docs/reports/LLM_DEBUG_REPORT.md) - LLMデバッグレポート
+- [docs/reports/LLM_STATUS_FINAL_REPORT.md](./docs/reports/LLM_STATUS_FINAL_REPORT.md) - LLMステータス最終レポート
+- [docs/reports/LLM_VERIFICATION_REPORT.md](./docs/reports/LLM_VERIFICATION_REPORT.md) - LLM検証レポート
+
+### LLM関連ドキュメント
+- [docs/LLM_MOCK_VS_REAL.md](./docs/LLM_MOCK_VS_REAL.md) - モックと実装の比較
+- [docs/LLM_PROBLEM_RESOLVED.md](./docs/LLM_PROBLEM_RESOLVED.md) - LLM問題解決記録
+- [docs/LLM_PROBLEM_SOLUTION.md](./docs/LLM_PROBLEM_SOLUTION.md) - LLM問題解決方法
 
 ## 🗂️ アーカイブ
 
@@ -63,14 +86,16 @@ Helmプロジェクトの主要ドキュメント一覧です。
 ## 🔍 ドキュメントの探し方
 
 ### セットアップ関連
+- クイックスタート: [docs/guides/QUICKSTART.md](./docs/guides/QUICKSTART.md)
 - 個人アカウント: [backend/QUICK_SETUP_PERSONAL_DRIVE.md](./backend/QUICK_SETUP_PERSONAL_DRIVE.md)
 - Google Workspace: [backend/SETUP_SHARED_DRIVE.md](./backend/SETUP_SHARED_DRIVE.md)
 - Vertex AI: [backend/VERTEX_AI_SETUP.md](./backend/VERTEX_AI_SETUP.md)
 
 ### 実装状況
-- 最新の実装サマリー: [WEEK2_SUMMARY.md](./WEEK2_SUMMARY.md)
-- 詳細な進捗: [WEEK2_PROGRESS.md](./WEEK2_PROGRESS.md)
-- 次のステップ: [NEXT_STEPS.md](./NEXT_STEPS.md)
+- 最新の実装サマリー: [docs/status/WEEK2_SUMMARY.md](./docs/status/WEEK2_SUMMARY.md)
+- 詳細な進捗: [docs/status/WEEK2_PROGRESS.md](./docs/status/WEEK2_PROGRESS.md)
+- 次のステップ: [docs/status/NEXT_STEPS.md](./docs/status/NEXT_STEPS.md)
+- プロジェクト状況: [docs/status/PROJECT_STATUS.md](./docs/status/PROJECT_STATUS.md)
 
 ### API仕様
 - [backend/API_DOCUMENTATION.md](./backend/API_DOCUMENTATION.md)

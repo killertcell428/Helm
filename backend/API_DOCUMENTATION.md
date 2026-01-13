@@ -9,6 +9,15 @@
 
 現在は認証不要です。将来はGoogle OAuth2を使用予定。
 
+## インタラクティブAPIドキュメント
+
+開発サーバー起動後、以下のURLでSwagger UIが利用できます：
+
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+ここで全エンドポイントの詳細を確認し、実際にAPIを呼び出すことができます。
+
 ## エンドポイント
 
 ### 1. ヘルスチェック
@@ -68,6 +77,11 @@ Google Meet議事録を取り込み、パース処理を実行します。
 
 **注意:**
 - `transcript` が空または未指定の場合、Google Meet APIから自動取得します（現在はモックデータ）
+- レスポンスには実際の議事録テキスト（`transcript`）とメタデータ（`metadata`）も含まれます
+
+**エラーレスポンス:**
+- `503 Service Unavailable`: Google Meet APIからの取得に失敗した場合
+- `422 Validation Error`: リクエストボディのバリデーションエラー
 
 ---
 
@@ -110,19 +124,70 @@ Google Chatログを取り込み、パース処理を実行します。
 }
 ```
 
+**注意:**
+- `messages` が空または未指定の場合、Google Chat APIから自動取得します（現在はモックデータ）
+- レスポンスには実際のチャットメッセージ（`messages`）とメタデータ（`metadata`）も含まれます
+
+**エラーレスポンス:**
+- `503 Service Unavailable`: Google Chat APIからの取得に失敗した場合
+- `422 Validation Error`: リクエストボディのバリデーションエラー
+
 ---
 
-### 4. 構造的問題検知
+### 4. 資料取り込み
+
+**POST /api/materials/ingest**
+
+会議資料（スライド、ドキュメントなど）を取り込みます。
+
+**リクエストボディ:**
+```json
+{
+  "material_id": "material_001",
+  "content": "会議資料のテキスト内容...",
+  "metadata": {
+    "title": "四半期経営会議資料",
+    "type": "presentation",
+    "created_at": "2025-01-15T10:00:00Z"
+  }
+}
+```
+
+**レスポンス:**
+```json
+{
+  "material_id": "material_001",
+  "status": "success",
+  "content_length": 1234,
+  "metadata": {
+    "title": "四半期経営会議資料",
+    "type": "presentation",
+    "created_at": "2025-01-15T10:00:00Z"
+  }
+}
+```
+
+**注意:**
+- 資料のテキスト内容を`content`フィールドに含める必要があります
+- 構造的問題検知時に`material_id`を指定することで、資料内容も分析に含まれます
+
+**エラーレスポンス:**
+- `422 Validation Error`: リクエストボディのバリデーションエラー
+
+---
+
+### 5. 構造的問題検知
 
 **POST /api/analyze**
 
-会議データとチャットデータから構造的問題を検知します。
+会議データとチャットデータから構造的問題を検知します。Vertex AI / Geminiを使用したLLM分析と、ルールベース分析の両方をサポートします。
 
 **リクエストボディ:**
 ```json
 {
   "meeting_id": "meeting_001",
-  "chat_id": "chat_001"  // オプション
+  "chat_id": "chat_001",  // オプション
+  "material_id": "material_001"  // オプション（会議資料）
 }
 ```
 
@@ -156,15 +221,40 @@ Google Chatログを取り込み、パース処理を実行します。
   },
   "score": 75,
   "severity": "HIGH",
+  "urgency": "MEDIUM",
   "explanation": "現在の会議構造は「正当化フェーズ」に入っています...",
   "created_at": "2025-01-20T10:00:00",
-  "status": "completed"
+  "status": "completed",
+  "is_llm_generated": true,
+  "llm_status": "success",
+  "llm_model": "gemini-3.0-pro",
+  "output_file": {
+    "filename": "analysis_123.json",
+    "file_id": "analysis_123",
+    "path": "outputs/analysis_123.json"
+  }
 }
 ```
 
+**レスポンスフィールドの説明:**
+- `is_llm_generated`: LLM（Vertex AI）を使用して生成されたかどうか（`true`/`false`）
+- `llm_status`: LLMの状態（`success`, `mock_fallback`, `error`など）
+- `llm_model`: 使用されたLLMモデル名（例: `gemini-3.0-pro`）
+- `output_file`: 分析結果が保存されたファイル情報（オプション）
+
+**注意:**
+- `chat_id`と`material_id`はオプションです
+- LLM統合が有効でない場合、ルールベース分析にフォールバックします
+- 分析結果は自動的にJSONファイルとして保存されます（`outputs/`ディレクトリ）
+
+**エラーレスポンス:**
+- `404 Not Found`: 指定された`meeting_id`が見つからない場合
+- `503 Service Unavailable`: LLM分析に失敗した場合（ルールベース分析にフォールバック）
+- `422 Validation Error`: リクエストボディのバリデーションエラー
+
 ---
 
-### 5. 分析結果取得
+### 6. 分析結果取得
 
 **GET /api/analysis/{analysis_id}**
 
@@ -176,9 +266,12 @@ Google Chatログを取り込み、パース処理を実行します。
 **レスポンス:**
 上記の `/api/analyze` と同じ形式
 
+**エラーレスポンス:**
+- `404 Not Found`: 指定された`analysis_id`が見つからない場合
+
 ---
 
-### 6. Executive呼び出し
+### 7. Executive呼び出し
 
 **POST /api/escalate**
 
@@ -198,14 +291,25 @@ Google Chatログを取り込み、パース処理を実行します。
   "analysis_id": "analysis_123",
   "target_role": "Executive",
   "reason": "正当化フェーズの兆候が検出されました。構造的変更にはExecutiveの承認が必要です。",
+  "severity": "HIGH",
+  "urgency": "MEDIUM",
+  "score": 75,
   "created_at": "2025-01-20T10:05:00",
   "status": "pending"
 }
 ```
 
+**注意:**
+- エスカレーション判断エンジンが、分析結果に基づいて自動的に適切なロールを決定します
+- エスカレーション条件を満たしていない場合（スコアが閾値未満など）、エラーが返されます
+
+**エラーレスポンス:**
+- `404 Not Found`: 指定された`analysis_id`が見つからない場合
+- `422 Validation Error`: エスカレーション条件を満たしていない場合
+
 ---
 
-### 7. Executive承認
+### 8. Executive承認
 
 **POST /api/approve**
 
@@ -234,9 +338,17 @@ Executiveが介入案を承認または修正します。
 }
 ```
 
+**注意:**
+- `decision`は`"approve"`または`"modify"`のいずれかである必要があります
+- `modifications`は`decision`が`"modify"`の場合に使用されます
+
+**エラーレスポンス:**
+- `404 Not Found`: 指定された`escalation_id`が見つからない場合
+- `422 Validation Error`: `decision`が無効な値の場合
+
 ---
 
-### 8. AI自律実行開始
+### 9. AI自律実行開始
 
 **POST /api/execute**
 
@@ -289,13 +401,36 @@ Executive承認後、AIが自律的にタスクを実行します。
     }
   ],
   "created_at": "2025-01-20T10:15:00",
-  "updated_at": "2025-01-20T10:15:00"
+  "updated_at": "2025-01-20T10:15:00",
+  "is_llm_generated": true,
+  "llm_status": "success",
+  "llm_model": "gemini-3.0-pro",
+  "output_file": {
+    "filename": "execution_abc_tasks.json",
+    "file_id": "execution_abc",
+    "path": "outputs/execution_abc_tasks.json"
+  }
 }
 ```
 
+**レスポンスフィールドの説明:**
+- `is_llm_generated`: タスク生成にLLMを使用したかどうか
+- `llm_status`: LLMの状態
+- `llm_model`: 使用されたLLMモデル名
+- `output_file`: タスク生成結果が保存されたファイル情報（オプション）
+
+**注意:**
+- 実行はバックグラウンドで非同期に実行されます
+- 実行進捗はWebSocketエンドポイント（`/api/execution/{execution_id}/ws`）でリアルタイムに取得できます
+- タスク生成結果は自動的にJSONファイルとして保存されます
+
+**エラーレスポンス:**
+- `404 Not Found`: 指定された`approval_id`が見つからない場合
+- `503 Service Unavailable`: LLMタスク生成に失敗した場合（モックタスクにフォールバック）
+
 ---
 
-### 9. 実行状態取得
+### 10. 実行状態取得
 
 **GET /api/execution/{execution_id}**
 
@@ -307,9 +442,16 @@ AI自律実行の進捗状況を取得します。
 **レスポンス:**
 上記の `/api/execute` と同じ形式（`status` と `progress` が更新される）
 
+**注意:**
+- 実行中のタスクは、経過時間に基づいて自動的に進捗が更新されます
+- 各タスクは約2秒間隔で順次実行されます
+
+**エラーレスポンス:**
+- `404 Not Found`: 指定された`execution_id`が見つからない場合
+
 ---
 
-### 10. 実行結果取得
+### 11. 実行結果取得
 
 **GET /api/execution/{execution_id}/results**
 
@@ -346,20 +488,171 @@ AI自律実行の結果を取得します。
 }
 ```
 
+**レスポンスフィールドの説明:**
+- `results`: 完了したタスクの結果リスト
+  - `type`: タスクタイプ（`document`, `notification`, `research`, `analysis`など）
+  - `name`: タスク名
+  - タスクタイプに応じた追加フィールド（`download_url`, `recipients`, `data`など）
+- `download_url`: メインのダウンロードURL（最初のドキュメント）
+
+**エラーレスポンス:**
+- `404 Not Found`: 指定された`execution_id`が見つからない場合
+
+---
+
+### 12. WebSocket: 実行進捗のリアルタイム更新
+
+**WebSocket /api/execution/{execution_id}/ws**
+
+AI自律実行の進捗をリアルタイムで取得します。
+
+**接続方法:**
+```javascript
+const ws = new WebSocket('ws://localhost:8000/api/execution/execution_abc/ws');
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log(data);
+  // {
+  //   "type": "progress",
+  //   "data": {
+  //     "execution_id": "execution_abc",
+  //     "status": "running",
+  //     "progress": 40,
+  //     "tasks": [...]
+  //   }
+  // }
+};
+```
+
+**メッセージタイプ:**
+- `progress`: 進捗更新
+- `completed`: 実行完了
+- `error`: エラー発生
+
+**注意:**
+- WebSocket接続は実行中のみ有効です
+- 複数のクライアントが同じ実行IDに接続できます
+
+---
+
+### 13. ファイルダウンロードURL取得
+
+**GET /api/download/{file_id}**
+
+Google DriveファイルのダウンロードURLを取得します。
+
+**パスパラメータ:**
+- `file_id`: Google DriveファイルID
+
+**レスポンス:**
+```json
+{
+  "file_id": "mock_file_id",
+  "download_url": "https://drive.google.com/file/d/mock_file_id/view",
+  "filename": "3案比較資料.pdf"
+}
+```
+
+**エラーレスポンス:**
+- `404 Not Found`: 指定された`file_id`が見つからない場合
+- `503 Service Unavailable`: Google Drive APIからの取得に失敗した場合
+
+---
+
+### 14. 出力ファイル一覧取得
+
+**GET /api/outputs**
+
+保存された出力ファイルの一覧を取得します。
+
+**クエリパラメータ:**
+- `file_type` (オプション): ファイルタイプでフィルタ（例: `analysis`, `tasks`）
+
+**レスポンス:**
+```json
+{
+  "files": [
+    {
+      "filename": "analysis_123.json",
+      "file_id": "analysis_123",
+      "file_type": "analysis",
+      "created_at": "2025-01-20T10:00:00",
+      "size": 1234
+    }
+  ],
+  "total": 1
+}
+```
+
+**エラーレスポンス:**
+- `500 Internal Server Error`: ファイル一覧の取得に失敗した場合
+
+---
+
+### 15. 出力ファイル取得
+
+**GET /api/outputs/{file_id}**
+
+保存された出力ファイルをダウンロードします。
+
+**パスパラメータ:**
+- `file_id`: ファイルID
+
+**レスポンス:**
+- `Content-Type`: `application/json`
+- ファイルの内容（JSON形式）
+
+**エラーレスポンス:**
+- `404 Not Found`: 指定された`file_id`が見つからない場合
+
+---
+
 ## エラーレスポンス
 
 すべてのエンドポイントで、エラーが発生した場合は以下の形式で返されます：
 
 ```json
 {
-  "detail": "エラーメッセージ"
+  "error_id": "550e8400-e29b-41d4-a716-446655440000",
+  "error_code": "NOT_FOUND",
+  "message": "会議データが見つかりません: meeting_001",
+  "details": {
+    "resource_type": "meeting",
+    "resource_id": "meeting_001"
+  }
 }
 ```
 
+**エラーレスポンスフィールド:**
+- `error_id`: エラーを一意に識別するID（トラブルシューティング用）
+- `error_code`: エラーコード（下記参照）
+- `message`: エラーメッセージ（日本語）
+- `details`: エラーの詳細情報（オプション）
+
 **HTTPステータスコード:**
 - `200`: 成功
-- `404`: リソースが見つからない
-- `500`: サーバーエラー
+- `400`: バリデーションエラー（`VALIDATION_ERROR`）
+- `404`: リソースが見つからない（`NOT_FOUND`）
+- `422`: リクエストボディのバリデーションエラー（`VALIDATION_ERROR`）
+- `500`: 内部サーバーエラー（`INTERNAL_SERVER_ERROR`）
+- `503`: サービス利用不可（`SERVICE_ERROR`）
+- `504`: タイムアウト（`TIMEOUT_ERROR`）
+
+**エラーコード一覧:**
+- `VALIDATION_ERROR`: バリデーションエラー
+- `NOT_FOUND`: リソースが見つからない
+- `SERVICE_ERROR`: 外部サービス（Google APIなど）の呼び出しエラー
+- `TIMEOUT_ERROR`: タイムアウトエラー
+- `RETRYABLE_ERROR`: リトライ可能なエラー
+- `INTERNAL_SERVER_ERROR`: 内部サーバーエラー
+- `HTTP_{status_code}`: HTTP例外（例: `HTTP_404`）
+
+**エラーハンドリングのベストプラクティス:**
+1. `error_id`を記録しておくと、トラブルシューティングが容易になります
+2. `error_code`に基づいて適切な処理を実装できます
+3. `details`フィールドに追加情報が含まれる場合があります
+4. `503 Service Unavailable`エラーの場合、リトライを検討してください
 
 ## 使用例
 
@@ -410,11 +703,42 @@ const data = await response.json();
 console.log(data);
 ```
 
-## インタラクティブAPIドキュメント
+## レート制限・制約事項
 
-開発サーバー起動後、以下のURLでSwagger UIが利用できます：
+現在、レート制限は実装されていません。将来実装予定です。
 
-http://localhost:8000/docs
+**制約事項:**
+- 議事録の最大サイズ: 制限なし（ただし、大きな議事録は処理に時間がかかる場合があります）
+- チャットメッセージ数: 制限なし
+- 同時実行数: 制限なし（ただし、リソースに応じて調整が必要な場合があります）
 
-ここで全エンドポイントの詳細を確認し、実際にAPIを呼び出すことができます。
+## データの永続化
+
+現在、データはインメモリストレージに保存されています。サーバーを再起動するとデータは失われます。
+
+**将来実装予定:**
+- Firestore統合によるデータの永続化
+- 分析結果の履歴管理
+- エスカレーション履歴の永続化
+
+## モックモードと実APIモード
+
+Helmは、モックモードと実APIモードの両方をサポートしています。
+
+**モックモード:**
+- Google APIの認証情報が設定されていない場合、自動的にモックモードになります
+- モックデータを使用して動作確認が可能です
+- レスポンスに`is_llm_generated: false`、`llm_status: "mock_fallback"`が含まれます
+
+**実APIモード:**
+- Google Cloud認証情報が設定されている場合、実APIモードになります
+- 実際のGoogle Meet、Google Chat、Vertex AI APIが使用されます
+- レスポンスに`is_llm_generated: true`、`llm_status: "success"`が含まれます
+
+**環境変数:**
+- `USE_LLM=true`: LLM統合を有効化
+- `GOOGLE_APPLICATION_CREDENTIALS`: Google Cloud認証情報のパス
+- `GOOGLE_CLOUD_PROJECT_ID`: Google CloudプロジェクトID
+
+詳細は[開発者ガイド](../DEVELOPER_GUIDE.md)を参照してください。
 

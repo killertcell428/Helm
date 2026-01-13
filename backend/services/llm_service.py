@@ -1,6 +1,6 @@
 """
 LLM統合サービス
-Vertex AI / Gemini APIの統合レイヤー
+Vertex AI / Gemini API / Gen AI SDK の統合レイヤー
 """
 
 import os
@@ -12,6 +12,13 @@ from config import config
 from services.prompts import AnalysisPromptBuilder, TaskGenerationPromptBuilder
 from services.evaluation import EvaluationParser
 
+# Gen AI SDK（google-generativeai）がインストールされている場合は優先的に利用
+try:
+    import google.generativeai as genai
+    _GENAI_AVAILABLE = True
+except ImportError:
+    _GENAI_AVAILABLE = False
+
 
 class LLMService:
     """LLM統合サービス"""
@@ -19,23 +26,34 @@ class LLMService:
     def __init__(
         self,
         project_id: Optional[str] = None,
-        location: str = "us-central1",
+        location: Optional[str] = None,
         model_name: Optional[str] = None
     ):
         """
         Args:
             project_id: Google Cloud Project ID
-            location: Vertex AIのリージョン
-            model_name: 使用するモデル名（デフォルト: gemini-3.0-pro または最新モデル）
+            location: Vertex AIのリージョン（デフォルト: us-central1、環境変数 VERTEX_AI_LOCATION で変更可能）
+            model_name: 使用するモデル名（デフォルト: gemini-1.5-flash-002）
         """
         self.project_id = project_id or os.getenv("GOOGLE_CLOUD_PROJECT_ID") or config.GOOGLE_CLOUD_PROJECT_ID
-        self.location = location
-        self.model_name = model_name or os.getenv("LLM_MODEL", "gemini-3.0-pro")
+        self.location = location or os.getenv("VERTEX_AI_LOCATION", "us-central1")
+        self.model_name = model_name or os.getenv("LLM_MODEL", "gemini-1.5-flash-002")
         self.use_llm = os.getenv("USE_LLM", "false").lower() == "true"
         self.max_retries = int(os.getenv("LLM_MAX_RETRIES", "3"))
         self.timeout = int(os.getenv("LLM_TIMEOUT", "60"))
         self.temperature = float(os.getenv("LLM_TEMPERATURE", "0.2"))
         self.top_p = float(os.getenv("LLM_TOP_P", "0.95"))
+        
+        # Gen AI SDK用の設定（GOOGLE_API_KEY があれば優先利用）
+        self.genai_api_key = os.getenv("GOOGLE_API_KEY")
+        self._genai_available = _GENAI_AVAILABLE and bool(self.genai_api_key)
+        if self._genai_available:
+            try:
+                genai.configure(api_key=self.genai_api_key)
+                logger.info("Gen AI SDK configured with GOOGLE_API_KEY")
+            except Exception as e:
+                logger.warning(f"Gen AI SDKの初期化に失敗しました: {e}。Vertex AI経由にフォールバックします。")
+                self._genai_available = False
         
         # Vertex AIの利用可能性をチェック
         self._check_vertex_ai_availability()
@@ -214,24 +232,54 @@ class LLMService:
         """
         model = model_name or self.model_name
         
+        # まず Gen AI SDK（google-generativeai）を優先的に利用
+        if self._genai_available:
+            try:
+                gen_model = genai.GenerativeModel(model)
+                # Gen AI SDK側はレスポンス形式を直接制御しづらいが、まずはテキスト前提で扱う
+                resp = gen_model.generate_content(prompt)
+                if not resp or not getattr(resp, "text", None):
+                    logger.warning("Gen AI SDKからの空レスポンス")
+                else:
+                    logger.info(f"Gen AI SDK呼び出し成功: model={model}")
+                    return resp.text
+            except Exception as e:
+                error_type = type(e).__name__
+                logger.error(
+                    f"Gen AI SDK呼び出しエラー: {e}",
+                    extra={
+                        "error_type": error_type,
+                        "model": model,
+                        "project_id": self.project_id,
+                        "location": self.location
+                    },
+                    exc_info=True
+                )
+                # Gen AI SDKで失敗した場合は、Vertex AI SDK経由にフォールバック
+        
+        # Gen AI SDKが使えない場合、または失敗した場合は Vertex AI SDK（vertexai）にフォールバック
         for attempt in range(self.max_retries):
             try:
-                from google.cloud import aiplatform
-                from vertexai.preview.generative_models import GenerativeModel
+                import vertexai
+                from vertexai.generative_models import GenerativeModel
                 
                 # Vertex AIの初期化（初回のみ）
                 if not hasattr(self, '_aiplatform_initialized'):
-                    aiplatform.init(project=self.project_id, location=self.location)
+                    vertexai.init(project=self.project_id, location=self.location)
                     self._aiplatform_initialized = True
                 
                 # モデルの選択（最新モデルを優先）
-                # gemini-3.0-pro が利用できない場合は gemini-pro にフォールバック
+                # gemini-1.5-pro が利用できない場合は gemini-pro にフォールバック
                 try:
                     generative_model = GenerativeModel(model)
                 except Exception as e:
                     logger.warning(f"モデル {model} の初期化失敗: {e}。gemini-pro にフォールバック")
                     model = "gemini-pro"
-                    generative_model = GenerativeModel(model)
+                    try:
+                        generative_model = GenerativeModel(model)
+                    except Exception as e2:
+                        logger.error(f"フォールバックモデル gemini-pro も失敗: {e2}")
+                        raise
                 
                 # 生成設定
                 generation_config = {

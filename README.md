@@ -5,7 +5,7 @@
 ## 📚 ドキュメント
 
 **初めての方はこちらから:**
-- [🚀 クイックスタートガイド](./QUICKSTART.md) - 初心者向け起動手順
+- [🚀 クイックスタートガイド](./docs/guides/QUICKSTART.md) - 初心者向け起動手順
 - [📐 アーキテクチャドキュメント](./ARCHITECTURE.md) - システム全体の設計
 - [📑 ドキュメント一覧](./DOCUMENTATION_INDEX.md) - 全ドキュメントのインデックス
 
@@ -74,7 +74,7 @@ Google Meet → 議事録・チャット取得 → 重要性・緊急性評価 �
 - ✅ エラーハンドリングの改善
 - ✅ 全機能の動作確認
 
-**詳細**: [WEEK2_SUMMARY.md](./WEEK2_SUMMARY.md) を参照してください。
+**詳細**: [docs/status/WEEK2_SUMMARY.md](./docs/status/WEEK2_SUMMARY.md) を参照してください。
 
 ### 実装済み
 
@@ -85,20 +85,20 @@ Google Meet → 議事録・チャット取得 → 重要性・緊急性評価 �
 - ✅ 実データ表示機能
 - ✅ エラーハンドリング（ユーザーフレンドリーなメッセージ）
 
-### 実装予定
+### 実装予定 / 進行中
 
 - ⏳ Vertex AI / Gemini統合（準備完了、実API統合待ち）
-- ⏳ 実行進捗のリアルタイム表示
-- ⏳ テストの拡充
-- ⏳ UI/UX改善
+- ⏳ テストの拡充（E2E + パフォーマンス）
+- ⏳ パフォーマンス最適化
 
 ## ドキュメント
 
 - [📑 ドキュメント一覧](./DOCUMENTATION_INDEX.md) - 全ドキュメントのインデックス
-- [📊 プロジェクト状況](./PROJECT_STATUS.md) - 現在の実装状況
-- [📝 Week 2サマリー](./WEEK2_SUMMARY.md) - Week 2の実装サマリー
-- [🚀 次のステップ](./NEXT_STEPS.md) - 次のステップ候補
+- [📊 プロジェクト状況](./docs/status/PROJECT_STATUS.md) - 現在の実装状況
+- [📝 Week 2サマリー](./docs/status/WEEK2_SUMMARY.md) - Week 2の実装サマリー
+- [🚀 次のステップ](./docs/status/NEXT_STEPS.md) - 次のステップ候補
 - [バックエンドセットアップガイド](./backend/SETUP.md)
+- [テスト実行サマリー](./backend/TEST_SETUP_SUMMARY.md) - テスト（ユニット/統合/E2E/パフォーマンス）の実行方法
 - [アーキテクチャ設計](./Architectures/)
 
 ## 開発スケジュール
@@ -108,7 +108,7 @@ Google Meet → 議事録・チャット取得 → 重要性・緊急性評価 �
 - **Week 3（2/3-2/9）**: 機能強化・品質向上
 - **Week 4（2/10-2/15）**: 提出物準備
 
-**次のステップ**: [NEXT_STEPS.md](./NEXT_STEPS.md) を参照してください。
+**次のステップ**: [docs/status/NEXT_STEPS.md](./docs/status/NEXT_STEPS.md) を参照してください。
 
 ## 提出物要件
 

@@ -9,18 +9,20 @@ from dotenv import load_dotenv
 import os
 load_dotenv()  # .envファイルを読み込む
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 from pydantic import BaseModel, ValidationError as PydanticValidationError
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set
 import uuid
 from datetime import datetime
 import traceback
 import time
+import asyncio
+import json
 from utils.logger import logger, set_log_context, clear_log_context
 from utils.error_notifier import error_notification_manager
 from utils.exceptions import (
@@ -371,6 +373,337 @@ analyses_db: Dict[str, Dict] = {}
 escalations_db: Dict[str, Dict] = {}
 approvals_db: Dict[str, Dict] = {}
 executions_db: Dict[str, Dict] = {}
+
+# ==================== WebSocket接続管理 ====================
+
+# アクティブなWebSocket接続を管理: {execution_id: [WebSocket, ...]}
+active_websocket_connections: Dict[str, List[WebSocket]] = {}
+
+# 実行中のバックグラウンドタスク: {execution_id: asyncio.Task}
+running_execution_tasks: Dict[str, asyncio.Task] = {}
+
+# ==================== WebSocket接続管理ヘルパー ====================
+
+async def add_websocket_connection(execution_id: str, websocket: WebSocket):
+    """WebSocket接続を追加"""
+    if execution_id not in active_websocket_connections:
+        active_websocket_connections[execution_id] = []
+    active_websocket_connections[execution_id].append(websocket)
+    logger.info(f"WebSocket connection added for execution {execution_id} (total: {len(active_websocket_connections[execution_id])})")
+
+async def remove_websocket_connection(execution_id: str, websocket: WebSocket):
+    """WebSocket接続を削除"""
+    if execution_id in active_websocket_connections:
+        if websocket in active_websocket_connections[execution_id]:
+            active_websocket_connections[execution_id].remove(websocket)
+        if len(active_websocket_connections[execution_id]) == 0:
+            del active_websocket_connections[execution_id]
+    logger.info(f"WebSocket connection removed for execution {execution_id}")
+
+async def broadcast_to_websockets(execution_id: str, message: Dict[str, Any]):
+    """指定されたexecution_idのすべてのWebSocket接続にメッセージをブロードキャスト"""
+    if execution_id not in active_websocket_connections:
+        return
+    
+    disconnected = []
+    
+    for websocket in active_websocket_connections[execution_id]:
+        try:
+            await websocket.send_json(message)
+        except Exception as e:
+            logger.warning(f"Failed to send message to WebSocket: {e}")
+            disconnected.append(websocket)
+    
+    # 切断された接続を削除
+    for websocket in disconnected:
+        await remove_websocket_connection(execution_id, websocket)
+
+def generate_document_content(analysis: Optional[Dict[str, Any]], approval: Optional[Dict[str, Any]] = None) -> str:
+    """
+    分析結果からドキュメント内容を生成
+    
+    Args:
+        analysis: 分析結果データ
+        approval: 承認データ（オプション）
+        
+    Returns:
+        生成されたドキュメント内容（マークダウン形式）
+    """
+    if not analysis:
+        return "# 構造的問題分析結果\n\n分析データがありません。\n"
+    
+    content_text = "# 構造的問題分析結果\n\n"
+    
+    # 概要セクション
+    content_text += "## 概要\n\n"
+    content_text += f"- **総合スコア**: {analysis.get('score', 'N/A')}\n"
+    content_text += f"- **重要度**: {analysis.get('severity', 'N/A')}\n"
+    if analysis.get('urgency'):
+        content_text += f"- **緊急性**: {analysis.get('urgency', 'N/A')}\n"
+    if analysis.get('explanation'):
+        content_text += f"\n**説明**: {analysis.get('explanation', '')}\n"
+    content_text += "\n"
+    
+    # 分析結果の詳細
+    findings = analysis.get("findings", [])
+    if findings:
+        content_text += "## 検出された問題\n\n"
+        
+        for i, finding in enumerate(findings, 1):
+            content_text += f"### {i}. {finding.get('pattern_id', '問題')}\n\n"
+            
+            # 重要度と緊急性
+            severity = finding.get('severity', 'N/A')
+            urgency = finding.get('urgency', 'N/A')
+            score = finding.get('score', 'N/A')
+            
+            content_text += f"**重要度**: {severity}  "
+            content_text += f"**緊急性**: {urgency}  "
+            content_text += f"**スコア**: {score}\n\n"
+            
+            # 説明
+            description = finding.get('description', '')
+            if description:
+                content_text += f"{description}\n\n"
+            
+            # 証拠
+            evidence = finding.get('evidence', [])
+            if evidence:
+                content_text += "**証拠**:\n"
+                for ev in evidence:
+                    content_text += f"- {ev}\n"
+                content_text += "\n"
+            
+            # 評価詳細（存在する場合）
+            evaluation = finding.get('evaluation')
+            if evaluation:
+                content_text += "**評価詳細**:\n"
+                if isinstance(evaluation, dict):
+                    overall_score = evaluation.get('overall_score', 'N/A')
+                    importance_score = evaluation.get('importance_score', 'N/A')
+                    urgency_score = evaluation.get('urgency_score', 'N/A')
+                    reasons = evaluation.get('reasons', [])
+                    
+                    content_text += f"- 総合スコア: {overall_score}\n"
+                    content_text += f"- 重要度スコア: {importance_score}\n"
+                    content_text += f"- 緊急性スコア: {urgency_score}\n"
+                    
+                    if reasons:
+                        content_text += "\n**理由**:\n"
+                        for reason in reasons:
+                            content_text += f"- {reason}\n"
+                        content_text += "\n"
+                content_text += "\n"
+            
+            # 定量スコア（存在する場合）
+            quantitative_scores = finding.get('quantitative_scores')
+            if quantitative_scores and isinstance(quantitative_scores, dict):
+                content_text += "**定量スコア**:\n"
+                for key, value in quantitative_scores.items():
+                    content_text += f"- {key}: {value}\n"
+                content_text += "\n"
+    else:
+        content_text += "検出された問題はありません。\n\n"
+    
+    # 推奨事項（承認データがある場合）
+    if approval:
+        decision = approval.get('decision', '')
+        modifications = approval.get('modifications')
+        
+        if decision or modifications:
+            content_text += "## Executive承認内容\n\n"
+            if decision:
+                content_text += f"**決定**: {decision}\n\n"
+            if modifications:
+                if isinstance(modifications, dict):
+                    interventions = modifications.get('interventions') or modifications.get('approved_items')
+                    if interventions:
+                        content_text += "**承認された介入案**:\n"
+                        for intervention in interventions:
+                            content_text += f"- {intervention}\n"
+                        content_text += "\n"
+                elif isinstance(modifications, list):
+                    content_text += "**修正内容**:\n"
+                    for mod in modifications:
+                        content_text += f"- {mod}\n"
+                    content_text += "\n"
+                elif isinstance(modifications, str):
+                    content_text += f"**修正内容**: {modifications}\n\n"
+    
+    return content_text
+
+async def execute_task(task: Dict[str, Any], execution: Dict[str, Any]) -> Dict[str, Any]:
+    """個別のタスクを実行"""
+    task_copy = task.copy() if isinstance(task, dict) else dict(task)
+    
+    try:
+        if task_copy.get("type") == "document":
+            # 資料生成
+            approval = approvals_db.get(execution.get("approval_id"))
+            escalation = None
+            analysis = None
+            if approval:
+                escalation = escalations_db.get(approval.get("escalation_id"))
+                if escalation:
+                    analysis = analyses_db.get(escalation.get("analysis_id"))
+            
+            # 分析結果から資料内容を生成（改善版）
+            content_text = generate_document_content(analysis, approval)
+            
+            doc_result = workspace_service.generate_document({
+                "title": task_copy.get("name", "3案比較資料"),
+                "content": content_text
+            })
+            
+            task_copy["result"] = {
+                "document_id": doc_result.get("document_id"),
+                "title": doc_result.get("title"),
+                "download_url": doc_result.get("download_url"),
+                "view_url": doc_result.get("view_url"),
+                "edit_url": doc_result.get("edit_url"),
+                "document_type": doc_result.get("document_type")
+            }
+            logger.info(f"Document generated: {doc_result.get('document_id')} - {doc_result.get('title')}")
+            
+        elif task_copy.get("type") == "research":
+            # リサーチ実行
+            research_result = workspace_service.research_market_data("ARPU動向")
+            task_copy["result"] = {
+                "data": research_result
+            }
+            
+        elif task_copy.get("type") == "analysis":
+            # 分析実行
+            analysis_result = workspace_service.analyze_data({})
+            task_copy["result"] = {
+                "data": analysis_result
+            }
+            
+        elif task_copy.get("type") == "notification":
+            # 通知実行（モック）
+            task_copy["result"] = {
+                "recipients": 8,
+                "status": "sent"
+            }
+        
+        task_copy["status"] = "completed"
+    except Exception as e:
+        logger.error(f"Task execution failed: {task_copy.get('name')} - {e}", exc_info=True)
+        task_copy["status"] = "failed"
+        task_copy["error"] = str(e)
+    
+    return task_copy
+
+async def execute_tasks_background(execution_id: str):
+    """バックグラウンドでタスクを実行し、進捗をWebSocket経由で送信"""
+    try:
+        execution = executions_db.get(execution_id)
+        if not execution:
+            logger.error(f"Execution {execution_id} not found")
+            return
+        
+        tasks = execution.get("tasks", [])
+        if not tasks:
+            logger.warning(f"No tasks to execute for {execution_id}")
+            return
+        
+        # 初期状態を送信
+        await broadcast_to_websockets(execution_id, {
+            "type": "progress",
+            "data": {
+                "execution_id": execution_id,
+                "status": "running",
+                "progress": 0,
+                "tasks": tasks
+            }
+        })
+        
+        # 各タスクを順次実行（2秒間隔）
+        updated_tasks = []
+        for i, task in enumerate(tasks):
+            # タスクを実行中に更新
+            task["status"] = "running"
+            await broadcast_to_websockets(execution_id, {
+                "type": "progress",
+                "data": {
+                    "execution_id": execution_id,
+                    "status": "running",
+                    "progress": int((i / len(tasks)) * 100),
+                    "tasks": tasks[:i] + [task] + tasks[i+1:]
+                }
+            })
+            
+            # タスクを実行（2秒待機）
+            await asyncio.sleep(2)
+            
+            # タスクを実行
+            executed_task = await execute_task(task, execution)
+            updated_tasks.append(executed_task)
+            
+            # 進捗を更新
+            progress = int(((i + 1) / len(tasks)) * 100)
+            execution["progress"] = progress
+            execution["updated_at"] = datetime.now().isoformat()
+            execution["tasks"] = updated_tasks + tasks[i+1:]
+            executions_db[execution_id] = execution
+            
+            # 進捗をブロードキャスト
+            await broadcast_to_websockets(execution_id, {
+                "type": "progress",
+                "data": {
+                    "execution_id": execution_id,
+                    "status": "running",
+                    "progress": progress,
+                    "tasks": updated_tasks + tasks[i+1:]
+                }
+            })
+        
+        # すべてのタスクが完了
+        execution["status"] = "completed"
+        execution["progress"] = 100
+        execution["updated_at"] = datetime.now().isoformat()
+        execution["tasks"] = updated_tasks
+        executions_db[execution_id] = execution
+        
+        # 完了通知を送信
+        await broadcast_to_websockets(execution_id, {
+            "type": "completed",
+            "data": {
+                "execution_id": execution_id,
+                "status": "completed",
+                "progress": 100,
+                "tasks": updated_tasks
+            }
+        })
+        
+        # バックグラウンドタスクを削除
+        if execution_id in running_execution_tasks:
+            del running_execution_tasks[execution_id]
+        
+        logger.info(f"Execution {execution_id} completed")
+        
+    except Exception as e:
+        logger.error(f"Error in background task execution for {execution_id}: {e}", exc_info=True)
+        
+        # エラー通知を送信
+        await broadcast_to_websockets(execution_id, {
+            "type": "error",
+            "data": {
+                "execution_id": execution_id,
+                "message": str(e),
+                "error_code": "EXECUTION_ERROR"
+            }
+        })
+        
+        # 実行状態を更新
+        execution = executions_db.get(execution_id)
+        if execution:
+            execution["status"] = "failed"
+            executions_db[execution_id] = execution
+        
+        # バックグラウンドタスクを削除
+        if execution_id in running_execution_tasks:
+            del running_execution_tasks[execution_id]
 
 # ==================== APIエンドポイント ====================
 
@@ -929,12 +1262,94 @@ async def execute(request: ExecuteRequest):
         
         logger.info(f"Execution {execution_id} started: {len(tasks)} tasks")
         
+        # バックグラウンドタスクとして実行を開始
+        if execution_id not in running_execution_tasks:
+            task = asyncio.create_task(execute_tasks_background(execution_id))
+            running_execution_tasks[execution_id] = task
+        
         return execution_data
     except HelmException:
         raise
     except Exception as e:
         logger.error(f"Unexpected error in execute: {e}", exc_info=True)
         raise
+
+@app.websocket("/api/execution/{execution_id}/ws")
+async def websocket_endpoint(websocket: WebSocket, execution_id: str):
+    """WebSocketエンドポイント: 実行進捗のリアルタイム更新"""
+    await websocket.accept()
+    logger.info(f"WebSocket connection accepted for execution {execution_id}")
+    
+    try:
+        # 実行状態を確認
+        execution = executions_db.get(execution_id)
+        if not execution:
+            await websocket.send_json({
+                "type": "error",
+                "data": {
+                    "execution_id": execution_id,
+                    "message": f"実行状態が見つかりません: {execution_id}",
+                    "error_code": "NOT_FOUND"
+                }
+            })
+            await websocket.close()
+            return
+        
+        # WebSocket接続を追加
+        await add_websocket_connection(execution_id, websocket)
+        
+        # 現在の実行状態を送信
+        await websocket.send_json({
+            "type": "progress",
+            "data": {
+                "execution_id": execution_id,
+                "status": execution.get("status", "unknown"),
+                "progress": execution.get("progress", 0),
+                "tasks": execution.get("tasks", [])
+            }
+        })
+        
+        # バックグラウンドタスクが開始されていない場合は開始
+        if execution.get("status") == "running" and execution_id not in running_execution_tasks:
+            task = asyncio.create_task(execute_tasks_background(execution_id))
+            running_execution_tasks[execution_id] = task
+        
+        # クライアントからのメッセージを待機
+        while True:
+            try:
+                data = await websocket.receive_text()
+                message = json.loads(data)
+                
+                if message.get("type") == "subscribe":
+                    # 既に接続済みなので何もしない
+                    pass
+                elif message.get("type") == "unsubscribe":
+                    break
+            except WebSocketDisconnect:
+                logger.info(f"WebSocket disconnected for execution {execution_id}")
+                break
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid JSON message from WebSocket: {data}")
+            except Exception as e:
+                logger.error(f"Error processing WebSocket message: {e}", exc_info=True)
+                
+    except Exception as e:
+        logger.error(f"Error in WebSocket endpoint: {e}", exc_info=True)
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "data": {
+                    "execution_id": execution_id,
+                    "message": str(e),
+                    "error_code": "WEBSOCKET_ERROR"
+                }
+            })
+        except:
+            pass
+    finally:
+        # WebSocket接続を削除
+        await remove_websocket_connection(execution_id, websocket)
+        logger.info(f"WebSocket connection closed for execution {execution_id}")
 
 @app.get("/api/execution/{execution_id}")
 async def get_execution(execution_id: str):
@@ -989,15 +1404,8 @@ async def get_execution(execution_id: str):
                                 if escalation:
                                     analysis = analyses_db.get(escalation.get("analysis_id"))
                             
-                            # 分析結果から資料内容を生成
-                            content_text = "3案比較の詳細分析"
-                            if analysis:
-                                findings = analysis.get("findings", [])
-                                if findings:
-                                    content_text = f"構造的問題分析結果\n\n"
-                                    for finding in findings:
-                                        content_text += f"## {finding.get('pattern_id', '問題')}\n"
-                                        content_text += f"{finding.get('description', '')}\n\n"
+                            # 分析結果から資料内容を生成（改善版）
+                            content_text = generate_document_content(analysis, approval)
                             
                             doc_result = workspace_service.generate_document({
                                 "title": task_copy.get("name", "3案比較資料"),

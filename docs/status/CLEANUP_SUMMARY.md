@@ -1,6 +1,7 @@
 # ファイル整理サマリー
 
-**実施日**: 2025年1月12日
+**最新の整理**: 2025年1月13日  
+**前回の整理**: 2025年1月12日
 
 ## 整理内容
 
@@ -99,5 +100,97 @@ Dev/
 1. **実APIの動作確認** - モックモードから実APIモードへの移行確認
 2. **実行進捗のリアルタイム表示** - ユーザー体験の向上
 3. **UI/UX改善** - ローディング状態とエラーメッセージの改善
+
+詳細は [NEXT_STEPS.md](./NEXT_STEPS.md) を参照してください。
+
+---
+
+## 2025年1月13日の整理
+
+### 整理内容
+
+Devディレクトリ直下に散らばっていたmdファイルを分類して、`docs/`ディレクトリ配下に整理しました。
+
+#### 新規作成したディレクトリ構造
+
+```
+Dev/docs/
+├── reports/          # テストレポート・検証レポート
+├── guides/          # ガイドドキュメント
+├── status/          # プロジェクトステータス・進捗記録
+└── *.md             # その他のドキュメント
+```
+
+#### 移動したファイル
+
+**レポート系** (`docs/reports/`):
+- `BROWSER_TEST_REPORT_LLM_INTEGRATION.md`
+- `BROWSER_TEST_REPORT_LLM_TRUE.md`
+- `BROWSER_TEST_REPORT_UI_UX.md`
+- `LLM_DEBUG_REPORT.md`
+- `LLM_STATUS_FINAL_REPORT.md`
+- `LLM_VERIFICATION_REPORT.md`
+- `TEST_AND_ERROR_HANDLING_SUMMARY.md`
+
+**ガイド系** (`docs/guides/`):
+- `DEVELOPER_GUIDE.md`
+- `GIT_SETUP_GUIDE.md`
+- `USER_GUIDE.md`
+- `QUICKSTART.md`
+
+**ステータス系** (`docs/status/`):
+- `PROJECT_STATUS.md`
+- `WEEK1_SUMMARY.md`
+- `WEEK2_PLAN.md`
+- `WEEK2_PROGRESS.md`
+- `WEEK2_SUMMARY.md`
+- `LLM_INTEGRATION_STATUS.md`
+- `LLM_INTEGRATION_SUMMARY.md`
+- `LLM_FINAL_STATUS.md`
+- `NEXT_STEPS.md`
+- `CLEANUP_SUMMARY.md` (このファイル)
+
+**その他** (`docs/`):
+- `LLM_MOCK_VS_REAL.md`
+- `LLM_PROBLEM_RESOLVED.md`
+- `LLM_PROBLEM_SOLUTION.md`
+
+#### 更新したファイル
+
+- `DOCUMENTATION_INDEX.md` - 新しいディレクトリ構造を反映
+- `README.md` - パスを新しい構造に更新
+
+### 整理後のディレクトリ構造
+
+```
+Dev/
+├── README.md                    # プロジェクト概要
+├── ARCHITECTURE.md              # アーキテクチャ
+├── DOCUMENTATION_INDEX.md       # ドキュメントインデックス
+├── docs/                        # ドキュメント ⭐ 新規
+│   ├── reports/                 # レポート
+│   ├── guides/                  # ガイド
+│   ├── status/                  # ステータス
+│   └── *.md                     # その他
+├── backend/                     # バックエンド
+│   ├── tests/                   # テスト（整理済み）
+│   └── *.md                     # バックエンドドキュメント
+└── archive/                     # アーカイブ
+    └── backend/                 # 古いテストスクリプト等
+```
+
+### 整理の効果
+
+1. **ドキュメントの分類が明確になった**
+   - レポート、ガイド、ステータスが分離され、目的別に探しやすくなった
+
+2. **Devディレクトリ直下がすっきりした**
+   - 重要なファイル（README.md, ARCHITECTURE.md等）が目立つようになった
+
+3. **テストスクリプトの配置が明確**
+   - 現在のテスト: `backend/tests/`
+   - 古いテスト: `archive/backend/`
+
+### 次のアクション
 
 詳細は [NEXT_STEPS.md](./NEXT_STEPS.md) を参照してください。
