@@ -135,7 +135,14 @@ Dev/
 │   │   ├── google_drive.py    # Google Drive統合
 │   │   ├── scoring.py          # スコアリングサービス
 │   │   ├── escalation_engine.py # エスカレーション判断エンジン
-│   │   └── output_service.py   # 出力サービス
+│   │   ├── output_service.py   # 出力サービス
+│   │   ├── adk_setup.py        # ADKセットアップ（モデル、Runner管理）
+│   │   └── agents/             # ADKエージェント
+│   │       ├── research_agent.py      # 市場データ分析エージェント
+│   │       ├── analysis_agent.py     # 社内データ統合エージェント
+│   │       ├── notification_agent.py # 通知エージェント
+│   │       ├── workflow_agent.py     # ワークフローエージェント
+│   │       └── shared_context.py     # 共有コンテキスト
 │   ├── schemas/               # データスキーマ
 │   │   └── firestore.py       # Firestoreスキーマ定義
 │   ├── utils/                 # ユーティリティ
@@ -374,6 +381,119 @@ logger.warning("警告メッセージ")
 # エラーログ
 logger.error("エラーが発生しました", exc_info=True)
 ```
+
+---
+
+## ADKベースのマルチエージェントシステムの実装
+
+Helmは、**ADK (Agent Development Kit)** を使用したマルチエージェントシステムでAI自律実行を実現しています。
+
+### Phase1（実装完了）
+
+Phase1では、モック実装とADK統合、フォールバック対応を実装しました。
+
+#### ADKセットアップ
+
+```python
+from services.adk_setup import get_model, get_or_create_runner, ADK_AVAILABLE
+
+# ADKが利用可能かチェック
+if ADK_AVAILABLE:
+    model = get_model()  # Geminiモデルを取得
+    if model:
+        # エージェントを構築
+        agent = build_research_agent()
+        # Runnerを取得または作成
+        runner_info = get_or_create_runner(agent, agent_id="research_agent")
+        if runner_info:
+            runner, session_service, app_name = runner_info
+```
+
+#### ResearchAgentの実装
+
+市場データを収集・分析するエージェント：
+
+```python
+from services.agents.research_agent import execute_research_task
+
+task = {
+    "id": "task1",
+    "name": "ARPU動向",
+    "type": "research",
+    "description": "市場データ分析：ARPU動向"
+}
+
+result = await execute_research_task(task, context)
+```
+
+**Phase1**: モック実装（固定データを返す）
+**Phase2**: Vertex AI Search API統合予定
+
+#### AnalysisAgentの実装
+
+社内データを統合し、財務シミュレーションを実行するエージェント：
+
+```python
+from services.agents.analysis_agent import execute_analysis_task
+
+task = {
+    "id": "task2",
+    "name": "財務シミュレーション",
+    "type": "analysis",
+    "description": "社内データ統合と財務シミュレーション"
+}
+
+result = await execute_analysis_task(task, context)
+```
+
+**Phase1**: モック実装（固定データを返す）
+**Phase2**: Google Drive API統合予定
+
+#### NotificationAgentの実装
+
+関係部署への通知メッセージを生成するエージェント：
+
+```python
+from services.agents.notification_agent import execute_notification_task
+
+task = {
+    "id": "task4",
+    "name": "関係部署への通知",
+    "type": "notification",
+    "description": "関係部署への事前通知"
+}
+
+result = await execute_notification_task(task, context)
+```
+
+**Phase1**: ドラフト生成のみ（送信しない）
+**Phase2**: Google Chat/Gmail API統合予定
+
+#### SharedContextの使用
+
+エージェント間でデータを共有するコンテキスト：
+
+```python
+from services.agents.shared_context import SharedContext
+
+context = SharedContext()
+# 結果を保存
+context.save_result("task1", {"data": "result_data"})
+# 結果を取得
+result = context.get_result("task1")
+# コンテキストを取得
+full_context = context.get_context()
+```
+
+### Phase2（実装予定）
+
+Phase2では、実際のAPI統合を実装します：
+
+1. **Vertex AI Search API統合**: `search_market_data`関数を実際のAPI呼び出しに置き換え
+2. **Google Drive API統合**: `fetch_internal_data`関数を実際のAPI呼び出しに置き換え
+3. **Google Chat/Gmail API統合**: `send_notification`関数を実際のAPI呼び出しに置き換え
+
+詳細は [ADKセットアップガイド](../backend/ADK_SETUP.md) を参照してください。
 
 ---
 
@@ -629,3 +749,4 @@ pytest tests/e2e/
 - [アーキテクチャドキュメント](./ARCHITECTURE.md)
 - [クイックスタートガイド](./QUICKSTART.md)
 - [バックエンドセットアップガイド](./backend/SETUP.md)
+- [ADKセットアップガイド](./backend/ADK_SETUP.md) - ADKベースのマルチエージェントシステムのセットアップ

@@ -140,21 +140,30 @@
 3. **機能拡張**: どの機能を優先的に実装するか（Case 2, Case 3、組織グラフなど）
 4. **コンペ提出準備**: ドキュメント整備とデモ準備の優先度
 
-## 最近の完了項目（2025年1月13日）
+## 最近の完了項目
 
-### ✅ 実行進捗のリアルタイム表示
+### ✅ ADKベースのマルチエージェントシステム実装（2025年1月14日）
+- ADK (Agent Development Kit) のセットアップ完了
+- ResearchAgent、AnalysisAgent、NotificationAgentの実装
+- モック実装とフォールバック対応
+- SharedContextによるエージェント間のデータ共有
+- テストスクリプトによる動作確認完了
+- **Phase1完了**: モック実装とADK統合
+- **Phase2予定**: 実際のAPI統合（Vertex AI Search、Google Drive、Google Chat/Gmail API）
+
+### ✅ 実行進捗のリアルタイム表示（2025年1月13日）
 - WebSocketエンドポイント実装
 - リアルタイム進捗更新機能
 - タスク完了通知機能
 - フォールバック機能（ポーリング方式）
 
-### ✅ 実APIの動作確認と改善
+### ✅ 実APIの動作確認と改善（2025年1月13日）
 - Google Meet API v2実装完了
 - Google Meet/Chat API統合テスト作成
 - ドキュメント生成内容の改善
 - エラーハンドリングのテストと確認
 
-### ✅ LLM連携（Gemini / Gen AI SDK）の確立
+### ✅ LLM連携（Gemini / Gen AI SDK）の確立（2025年1月13日）
 - Gen AI SDK（`google.generativeai`）経由での Gemini 呼び出しを実APIとして採用
 - デフォルトモデルを `models/gemini-2.0-flash-001` とし、`USE_LLM=true` + `GOOGLE_API_KEY` で本番モード動作
 - LLM失敗時はモックに自動フォールバック（`llm_status=mock_fallback`）する設計を維持
@@ -163,14 +172,22 @@
 
 ### 優先度: 高 🔴
 
-1. **ドキュメント整備**（コンペ提出準備）
+1. **Phase2: 実際のAPI統合**（ADKエージェント）
+   - Vertex AI Search API統合（市場データ検索）
+   - Google Drive API統合（社内データ取得）
+   - Google Chat/Gmail API統合（通知送信）
+   - **見積もり**: 3-5日
+   - **参考**: [ADKセットアップガイド](../backend/ADK_SETUP.md)
+
+2. **ドキュメント整備**（コンペ提出準備）
    - Zenn記事とYoutube動画用の台本作成
    - デモ動画の準備
    - アーキテクチャドキュメントの更新
    - **見積もり**: 2-3日
 
-2. **E2Eテストの拡充**
+3. **E2Eテストの拡充**
    - WebSocket統合を含む完全なフローのテスト
+   - ADKエージェントの統合テスト
    - パフォーマンステスト
    - **見積もり**: 2-3日
 

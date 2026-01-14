@@ -8,6 +8,7 @@ HelmのバックエンドAPIサーバー。Googleサービス統合とAI自律�
 - [🔧 セットアップガイド](./SETUP.md) - 詳細なセットアップ手順
 - [📖 APIドキュメント](./API_DOCUMENTATION.md) - 全APIエンドポイントの詳細
 - [📐 アーキテクチャドキュメント](../ARCHITECTURE.md) - システム全体の設計
+- [🤖 ADKセットアップガイド](./ADK_SETUP.md) - ADKベースのマルチエージェントシステムのセットアップ
 
 ## 機能
 
@@ -18,7 +19,11 @@ HelmのバックエンドAPIサーバー。Googleサービス統合とAI自律�
   - マルチ視点LLM分析（4つのロール視点から評価）
   - アンサンブルスコアリング（統合評価）
 - Executive呼び出しと承認
-- Googleサービス経由でのタスク実行
+- **ADKベースのマルチエージェントシステム**によるAI自律実行
+  - ResearchAgent（市場データ分析）
+  - AnalysisAgent（社内データ統合）
+  - NotificationAgent（通知生成）
+  - DocumentAgent（資料生成 - Google Docs API）
 - 結果のダウンロード
 
 ## セットアップ
@@ -89,6 +94,22 @@ Google API統合が完了しました：
 - ✅ LLM統合（Gemini / Gen AI SDK）
 
 **詳細**: [REAL_DATA_IMPLEMENTATION.md](./REAL_DATA_IMPLEMENTATION.md) を参照してください。
+
+### ADKベースのマルチエージェントシステム実装完了 ✅
+
+**Phase1（実装完了）**:
+- ✅ ADK (Agent Development Kit) のセットアップ
+- ✅ ResearchAgent、AnalysisAgent、NotificationAgentの実装
+- ✅ モック実装とフォールバック対応
+- ✅ SharedContextによるエージェント間のデータ共有
+- ✅ テストスクリプトによる動作確認完了
+
+**Phase2（実装予定）**:
+- Vertex AI Search API統合（市場データ検索）
+- Google Drive API統合（社内データ取得）
+- Google Chat/Gmail API統合（通知送信）
+
+**詳細**: [ADK_SETUP.md](./ADK_SETUP.md) を参照してください。
 
 ### 認証方式
 

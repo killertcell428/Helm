@@ -63,6 +63,13 @@ Helmは、組織の意思決定プロセスを監視し、構造的問題を検�
 │  │  │  Workspace   │  │  Google      │                │   │
 │  │  │   Service    │  │  Drive       │                │   │
 │  │  └──────────────┘  └──────────────┘                │   │
+│  │                                                       │   │
+│  │  ┌──────────────┐  ┌──────────────┐                │   │
+│  │  │  ADK Setup   │  │  ADK Agents  │                │   │
+│  │  │   Service    │  │  (Research,  │                │   │
+│  │  │              │  │   Analysis,   │                │   │
+│  │  │              │  │   Notification)│              │   │
+│  │  └──────────────┘  └──────────────┘                │   │
 │  └───────────────────────────────────────────────────────┘   │
 │                     │                                        │
 │  ┌──────────────────▼───────────────────────────────────┐   │
@@ -165,37 +172,55 @@ Google Meet/Chat
       └─→ [却下] ──→ [終了]
 ```
 
-### 4. AI自律実行フロー
+### 4. AI自律実行フロー（ADKベースのマルチエージェントシステム）
 
 ```
 [承認完了]
       │
       ▼
-[実行計画生成]
+[実行計画生成] (LLM Service)
       │
-      ├─→ [タスク1: 市場データ分析]
-      ├─→ [タスク2: 社内データ統合]
-      ├─→ [タスク3: 資料生成]
-      ├─→ [タスク4: 通知送信]
-      └─→ [タスク5: 会議設定]
-      │
-      ▼
-[Google Workspace API]
-      │
-      ├─→ [リサーチ]
-      ├─→ [分析]
-      ├─→ [資料作成]
-      └─→ [通知]
+      ├─→ [タスク1: 市場データ分析] ──→ [ResearchAgent (ADK)]
+      ├─→ [タスク2: 社内データ統合] ──→ [AnalysisAgent (ADK)]
+      ├─→ [タスク3: 資料生成] ──→ [DocumentAgent (Google Docs API)]
+      ├─→ [タスク4: 通知送信] ──→ [NotificationAgent (ADK)]
+      └─→ [タスク5: 会議設定] ──→ [CalendarAgent (将来実装)]
       │
       ▼
-[Google Drive API]
+[SharedContext] (エージェント間のデータ共有)
+      │
+      ├─→ [ResearchAgent]
+      │   ├─→ search_market_data (モック / Phase2: Vertex AI Search)
+      │   └─→ analyze_market_data (モック / Phase2: Gemini)
+      │
+      ├─→ [AnalysisAgent]
+      │   ├─→ fetch_internal_data (モック / Phase2: Google Drive API)
+      │   └─→ perform_financial_simulation (モック / Phase2: Gemini)
+      │
+      ├─→ [NotificationAgent]
+      │   ├─→ generate_notification_message (モック / Phase2: Gemini)
+      │   └─→ send_notification (Phase1: ドラフトのみ / Phase2: Google Chat/Gmail API)
+      │
+      └─→ [DocumentAgent]
+          └─→ generate_document (Google Docs API - 実装済み)
       │
       ▼
 [結果保存 & ダウンロードURL生成]
       │
       ▼
-[フロントエンドに結果返却]
+[フロントエンドに結果返却] (WebSocket経由でリアルタイム更新)
 ```
+
+**Phase1（実装完了）**:
+- ADKベースのマルチエージェントシステム実装
+- ResearchAgent、AnalysisAgent、NotificationAgentの実装
+- モック実装とフォールバック対応
+- SharedContextによるエージェント間のデータ共有
+
+**Phase2（実装予定）**:
+- Vertex AI Search API統合（市場データ検索）
+- Google Drive API統合（社内データ取得）
+- Google Chat/Gmail API統合（通知送信）
 
 ## コンポーネント詳細
 
@@ -250,6 +275,13 @@ backend/
 │   ├── google_workspace.py # Google Workspace統合
 │   ├── google_drive.py     # Google Drive統合
 │   ├── output_service.py   # 出力サービス
+│   ├── adk_setup.py        # ADKセットアップ（モデル、Runner管理）
+│   ├── agents/             # ADKエージェント
+│   │   ├── research_agent.py      # 市場データ分析エージェント
+│   │   ├── analysis_agent.py     # 社内データ統合エージェント
+│   │   ├── notification_agent.py # 通知エージェント
+│   │   ├── workflow_agent.py     # ワークフローエージェント
+│   │   └── shared_context.py     # 共有コンテキスト
 │   ├── prompts/            # LLMプロンプト
 │   │   ├── analysis_prompt.py
 │   │   └── task_generation_prompt.py
@@ -295,6 +327,13 @@ backend/
 - ルールベース分析（安全側のベースライン）
 - パターン検出とスコアリング
 - 定量指標の抽出（KPI下方修正回数、撤退議論の有無、判断集中率など）
+
+**ADKエージェント（Phase1実装完了）**
+- **ResearchAgent**: 市場データを収集・分析するエージェント（モック実装、Phase2でVertex AI Search統合予定）
+- **AnalysisAgent**: 社内データを統合し、財務シミュレーションを実行するエージェント（モック実装、Phase2でGoogle Drive API統合予定）
+- **NotificationAgent**: 関係部署への通知メッセージを生成するエージェント（Phase1ではドラフト生成のみ、Phase2でGoogle Chat/Gmail API統合予定）
+- **TaskWorkflowAgent**: タスクの依存関係を管理し、エージェントを実行するワークフローエージェント
+- **SharedContext**: エージェント間でデータを共有するコンテキスト管理
 
 **ScoringService**
 - スコアリングロジック

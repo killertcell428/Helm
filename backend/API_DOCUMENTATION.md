@@ -445,11 +445,14 @@ Executiveが介入案を承認または修正します。
 
 ---
 
-### 9. AI自律実行開始
+### 9. AI自律実行開始（ADKベースのマルチエージェントシステム）
 
 **POST /api/execute**
 
-Executive承認後、AIが自律的にタスクを実行します。
+Executive承認後、AIが**ADK (Agent Development Kit)** を使用したマルチエージェントシステムで自律的にタスクを実行します。
+
+**Phase1（実装完了）**: モック実装とADK統合、フォールバック対応
+**Phase2（実装予定）**: 実際のAPI統合（Vertex AI Search、Google Drive、Google Chat/Gmail API）
 
 **リクエストボディ:**
 ```json

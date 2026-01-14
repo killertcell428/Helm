@@ -27,15 +27,18 @@ Helmは、複数の視点から同一のデータを評価することで、よ�
 
 各視点の評価結果をアンサンブル（統合）することで、人間の経営判断に近い精度で構造リスクを評価します。
 
-### AI自律実行
+### AI自律実行（ADKベースのマルチエージェントシステム）
 
-Executiveの承認後、Helmは自律的に以下のタスクを実行します：
+Executiveの承認後、Helmは**ADK (Agent Development Kit)** を使用したマルチエージェントシステムで自律的に以下のタスクを実行します：
 
-- 市場データ分析
-- 社内データ統合
-- 3案比較資料の自動生成
-- 関係部署への事前通知
-- 会議アジェンダの更新
+- **市場データ分析** (ResearchAgent): 市場データを収集・分析
+- **社内データ統合** (AnalysisAgent): 社内データを統合し、財務シミュレーションを実行
+- **3案比較資料の自動生成** (DocumentAgent): Google Docs APIを使用して資料を生成
+- **関係部署への事前通知** (NotificationAgent): 通知ドラフトを生成（Phase1では送信せず、Phase2で実装予定）
+- **会議アジェンダの更新** (CalendarAgent): 会議アジェンダを更新（将来実装予定）
+
+**Phase1（実装完了）**: モック実装とADK統合、フォールバック対応
+**Phase2（実装予定）**: 実際のAPI統合（Vertex AI Search、Google Drive、Google Chat/Gmail API）
 
 ## 📚 ドキュメント
 
@@ -68,7 +71,14 @@ Dev/
 │   │   ├── llm_service.py     # LLM統合サービス
 │   │   ├── scoring.py          # スコアリングサービス
 │   │   ├── google_workspace.py # Google Workspace統合
-│   │   └── google_drive.py     # Google Drive統合
+│   │   ├── google_drive.py     # Google Drive統合
+│   │   ├── adk_setup.py        # ADKセットアップ
+│   │   └── agents/             # ADKエージェント
+│   │       ├── research_agent.py      # 市場データ分析エージェント
+│   │       ├── analysis_agent.py     # 社内データ統合エージェント
+│   │       ├── notification_agent.py # 通知エージェント
+│   │       ├── workflow_agent.py     # ワークフローエージェント
+│   │       └── shared_context.py    # 共有コンテキスト
 │   ├── schemas/               # データスキーマ
 │   │   └── firestore.py
 │   └── requirements.txt
@@ -130,6 +140,7 @@ Google Meet → 議事録・チャット取得 → マルチ視点評価（ル�
 - **フレームワーク**: FastAPI
 - **言語**: Python 3.12
 - **LLM**: Google Gemini 2.0 Flash (Gen AI SDK)
+- **ADK**: Google Agent Development Kit (`google-adk`) - マルチエージェントシステム
 - **Google API**: `google-api-python-client`, `google-auth-oauthlib`
 - **テスト**: pytest
 
@@ -146,6 +157,7 @@ Google Meet → 議事録・チャット取得 → マルチ視点評価（ル�
 - [📖 APIドキュメント](./backend/API_DOCUMENTATION.md) - 全APIエンドポイントの詳細
 - [🔧 開発者ガイド](./docs/guides/DEVELOPER_GUIDE.md) - 開発者向けガイド
 - [バックエンドセットアップガイド](./backend/SETUP.md)
+- [ADKセットアップガイド](./backend/ADK_SETUP.md) - ADKベースのマルチエージェントシステムのセットアップ
 - [テスト実行サマリー](./backend/TEST_SETUP_SUMMARY.md) - テストの実行方法
 
 ## 提出物要件

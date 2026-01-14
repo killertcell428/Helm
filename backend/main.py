@@ -46,6 +46,10 @@ from services import (
     MultiRoleLLMAnalyzer,
     EnsembleScoringService,
 )
+from services.agents.research_agent import execute_research_task
+from services.agents.analysis_agent import execute_analysis_task
+from services.agents.notification_agent import execute_notification_task
+from services.agents.shared_context import SharedContext
 from services.escalation_engine import EscalationEngine
 from services.output_service import OutputService
 
@@ -378,6 +382,9 @@ escalations_db: Dict[str, Dict] = {}
 approvals_db: Dict[str, Dict] = {}
 executions_db: Dict[str, Dict] = {}
 
+# グローバル共有コンテキスト（実行IDごとに管理）
+shared_contexts: Dict[str, SharedContext] = {}
+
 # ==================== WebSocket接続管理 ====================
 
 # アクティブなWebSocket接続を管理: {execution_id: [WebSocket, ...]}
@@ -537,12 +544,32 @@ def generate_document_content(analysis: Optional[Dict[str, Any]], approval: Opti
     return content_text
 
 async def execute_task(task: Dict[str, Any], execution: Dict[str, Any]) -> Dict[str, Any]:
-    """個別のタスクを実行"""
+    """個別のタスクを実行（ADKエージェントを使用）"""
     task_copy = task.copy() if isinstance(task, dict) else dict(task)
+    execution_id = execution.get("execution_id")
+    
+    # 実行IDごとの共有コンテキストを取得または作成
+    if execution_id not in shared_contexts:
+        shared_contexts[execution_id] = SharedContext()
+    context = shared_contexts[execution_id]
     
     try:
-        if task_copy.get("type") == "document":
-            # 資料生成
+        task_type = task_copy.get("type")
+        
+        if task_type == "research":
+            # ResearchAgentを実行
+            result = await execute_research_task(task_copy, context.get_context())
+            task_copy["result"] = result
+        elif task_type == "analysis":
+            # AnalysisAgentを実行
+            result = await execute_analysis_task(task_copy, context.get_context())
+            task_copy["result"] = result
+        elif task_type == "notification":
+            # NotificationAgentを実行
+            result = await execute_notification_task(task_copy, context.get_context())
+            task_copy["result"] = result
+        elif task_type == "document":
+            # 既存の実装を使用（Google Docs生成）
             approval = approvals_db.get(execution.get("approval_id"))
             escalation = None
             analysis = None
@@ -568,28 +595,10 @@ async def execute_task(task: Dict[str, Any], execution: Dict[str, Any]) -> Dict[
                 "document_type": doc_result.get("document_type")
             }
             logger.info(f"Document generated: {doc_result.get('document_id')} - {doc_result.get('title')}")
-            
-        elif task_copy.get("type") == "research":
-            # リサーチ実行
-            research_result = workspace_service.research_market_data("ARPU動向")
-            task_copy["result"] = {
-                "data": research_result
-            }
-            
-        elif task_copy.get("type") == "analysis":
-            # 分析実行
-            analysis_result = workspace_service.analyze_data({})
-            task_copy["result"] = {
-                "data": analysis_result
-            }
-            
-        elif task_copy.get("type") == "notification":
-            # 通知実行（モック）
-            task_copy["result"] = {
-                "recipients": 8,
-                "status": "sent"
-            }
+        # calendarタイプは未実装
         
+        # 結果を共有コンテキストに保存
+        context.save_result(task_copy.get("id"), task_copy.get("result", {}))
         task_copy["status"] = "completed"
     except Exception as e:
         logger.error(f"Task execution failed: {task_copy.get('name')} - {e}", exc_info=True)
