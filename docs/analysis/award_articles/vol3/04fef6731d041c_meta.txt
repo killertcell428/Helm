@@ -1,0 +1,4 @@
+Rank: 要確認
+Name: MindEcho
+Team: MindEcho
+URL: https://zenn.dev/666giru/articles/04fef6731d041c

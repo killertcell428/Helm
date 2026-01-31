@@ -1,17 +1,22 @@
+# コア依存関係
 fastapi>=0.104.1
 uvicorn[standard]>=0.24.0
 pydantic>=2.5.0
 python-dotenv>=1.0.0
-google-cloud-firestore>=2.13.1
-google-cloud-aiplatform>=1.38.1
-google-api-python-client>=2.108.0
+
+# Google Cloud 基本ライブラリ
 google-auth>=2.25.2
 google-auth-httplib2>=0.1.1
 google-auth-oauthlib>=1.1.0
+google-api-python-client>=2.108.0
+
+# Google Cloud サービス
+google-cloud-firestore>=2.13.1
+google-cloud-aiplatform>=1.38.1
+
+# Gen AI SDK（google-generativeai）- LLM統合用（明示的なバージョン指定）
+google-generativeai==0.8.3
 
 # ADK関連（オプション、後でインストール可能）
-# 注意: google-generativeaiはレガシーなので使用しない
 google-adk>=1.0.0
-# ADKが内部でgoogle-genaiを使用するため、必要に応じて明示的に指定
-# google-genai>=1.0.0
 

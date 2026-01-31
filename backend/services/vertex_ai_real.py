@@ -35,7 +35,8 @@ class VertexAIRealService:
         
         # Vertex AIの初期化
         aiplatform.init(project=self.project_id, location=self.location)
-        self.model = GenerativeModel("gemini-pro")
+        # 最新の推奨モデル: gemini-1.5-pro (gemini-proはレガシー)
+        self.model = GenerativeModel("gemini-1.5-pro")
     
     def analyze_structure(self, meeting_data: Dict[str, Any], chat_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """

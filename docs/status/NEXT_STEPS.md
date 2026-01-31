@@ -113,15 +113,65 @@
 
 ## 推奨される次のステップ
 
+### 🎯 提出時点での最終デプロイ版アプリ完成に向けた優先タスク（再来週提出）
+
+#### 第1優先（必須）🔴
+
+1. **Cloud Runデプロイの本実装**
+   - **現状**: 設定ファイルは準備済みだが、実際のデプロイと動作確認が未完了
+   - **必要な作業**:
+     - [ ] Google Cloud Projectの最終確認
+     - [ ] Cloud Runへの実際のデプロイ実行
+     - [ ] 環境変数の設定（Cloud Run環境変数として設定）
+     - [ ] デプロイ後の動作確認（APIエンドポイントのテスト）
+     - [ ] CORS設定の確認（フロントエンドからのアクセス許可）
+   - **見積もり**: 1-2日
+   - **参考**: [SETUP.md](../backend/SETUP.md)、[cloudbuild.yaml](../backend/cloudbuild.yaml)
+
+2. **ADKエージェント機能の本実装（Phase2）**
+   - **現状**: Phase1（モック実装）は完了。Phase2（実際のAPI統合）が未完了
+   - **必要な作業**:
+     - [ ] Vertex AI Search API統合（ResearchAgent用）
+     - [ ] Google Drive API統合（AnalysisAgent用、社内データ取得）
+     - [ ] Google Chat/Gmail API統合（NotificationAgent用、通知送信）
+     - [ ] 各エージェントの統合テスト
+   - **見積もり**: 3-5日
+   - **参考**: [ADK_SETUP.md](../backend/ADK_SETUP.md)
+   - **注意**: 時間がなければPhase1のままでも可（モック実装で動作）
+
+3. **フロントエンドの本番デプロイ確認**
+   - **現状**: Vercelへのデプロイ設定はあるが、本番環境の最終確認が必要
+   - **必要な作業**:
+     - [ ] 本番環境のAPI URL設定（Cloud RunのURL）
+     - [ ] 環境変数の設定
+     - [ ] ビルドとデプロイの確認
+     - [ ] 本番環境での動作確認
+   - **見積もり**: 0.5-1日
+
+#### 第2優先（推奨）🟡
+
+4. **エラーログとモニタリングの改善**
+   - **見積もり**: 1-2日
+
+5. **投稿用コンテンツ作成**
+   - **必要な作業**:
+     - [ ] Zenn記事の作成（アーキテクチャ説明、実装のハイライト、技術スタック、デモの説明）
+     - [ ] YouTube動画用の台本作成（デモの流れ、技術的な説明ポイント、実装のハイライト）
+     - [ ] デモ動画の準備（スクリーンキャプチャ、ナレーション、編集）
+   - **見積もり**: 3-4日
+
+#### 第3優先（時間があれば）🟢
+
+6. **E2Eテストの拡充**
+   - **見積もり**: 2-3日
+
+7. **パフォーマンス最適化**
+   - **見積もり**: 2-3日
+
 ### 短期（1-2週間）✅ **進行中**
 1. ✅ **実APIの動作確認** - 完了（Google Meet/Chat API実装とテスト完了）
 2. ✅ **実行進捗のリアルタイム表示** - 完了（WebSocket実装完了）
 3. ✅ **UI/UX改善** - 完了（スケルトンローディング、トースト通知、レスポンシブ、アニメーション）
-
-**次の優先タスク**:
-1. **ドキュメント整備** - コンペ提出に向けたドキュメント作成（Zenn記事、Youtube台本など）
-2. **E2Eテストの拡充** - WebSocket統合を含む完全なフローのテスト
-3. **パフォーマンス最適化** - レスポンス時間の改善
 
 ### 中期（1ヶ月）
 1. **テストの拡充** - 品質保証の強化
@@ -165,12 +215,16 @@
 
 ### ✅ LLM連携（Gemini / Gen AI SDK）の確立（2025年1月13日）
 - Gen AI SDK（`google.generativeai`）経由での Gemini 呼び出しを実APIとして採用
-- デフォルトモデルを `models/gemini-2.0-flash-001` とし、`USE_LLM=true` + `GOOGLE_API_KEY` で本番モード動作
+- デフォルトモデルを `models/gemini-1.5-flash` とし、`USE_LLM=true` + `GOOGLE_API_KEY` で本番モード動作（gemini-2.0-flash-001は廃止予定のため更新）
 - LLM失敗時はモックに自動フォールバック（`llm_status=mock_fallback`）する設計を維持
 
 ## 次のアクション推奨
 
-### 優先度: 高 🔴
+### 🎯 提出時点での最終デプロイ版アプリ完成に向けた優先タスク
+
+**詳細は上記「提出時点での最終デプロイ版アプリ完成に向けた優先タスク」セクションを参照**
+
+### 優先度: 高 🔴（提出後も継続）
 
 1. **Phase2: 実際のAPI統合**（ADKエージェント）
    - Vertex AI Search API統合（市場データ検索）
@@ -179,13 +233,18 @@
    - **見積もり**: 3-5日
    - **参考**: [ADKセットアップガイド](../backend/ADK_SETUP.md)
 
-2. **ドキュメント整備**（コンペ提出準備）
+2. **Cloud Runデプロイの本実装**
+   - 実際のデプロイ実行と動作確認
+   - 環境変数の設定
+   - **見積もり**: 1-2日
+
+3. **投稿用コンテンツ作成**（コンペ提出準備）
    - Zenn記事とYoutube動画用の台本作成
    - デモ動画の準備
    - アーキテクチャドキュメントの更新
-   - **見積もり**: 2-3日
+   - **見積もり**: 3-4日
 
-3. **E2Eテストの拡充**
+4. **E2Eテストの拡充**
    - WebSocket統合を含む完全なフローのテスト
    - ADKエージェントの統合テスト
    - パフォーマンステスト
@@ -205,7 +264,11 @@
 
 ## 参考資料
 
+- **[CURRENT_DEVELOPMENT_STATUS.md](./CURRENT_DEVELOPMENT_STATUS.md)** - 現在の開発状況の詳細整理（最新）
 - [WEEK2_SUMMARY.md](./WEEK2_SUMMARY.md) - Week 2の実装サマリー
 - [WEEK2_PROGRESS.md](./WEEK2_PROGRESS.md) - 詳細な進捗記録
-- [REAL_DATA_IMPLEMENTATION.md](./backend/REAL_DATA_IMPLEMENTATION.md) - 実データ実装の詳細
-- [BROWSER_TEST_REPORT_COMPLETE.md](./archive/BROWSER_TEST_REPORT_COMPLETE.md) - 動作確認レポート
+- [PROJECT_STATUS.md](./PROJECT_STATUS.md) - プロジェクト状況
+- [REAL_DATA_IMPLEMENTATION.md](../backend/REAL_DATA_IMPLEMENTATION.md) - 実データ実装の詳細
+- [BROWSER_TEST_REPORT_COMPLETE.md](../archive/BROWSER_TEST_REPORT_COMPLETE.md) - 動作確認レポート
+- [ADK_SETUP.md](../backend/ADK_SETUP.md) - ADKセットアップガイド
+- [SETUP.md](../backend/SETUP.md) - バックエンドセットアップガイド

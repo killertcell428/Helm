@@ -1,0 +1,4 @@
+Rank: 要確認
+Name: Smart Chore App
+Team: 個人
+URL: https://zenn.dev/tenyyprn/articles/9965fd0b8f144a

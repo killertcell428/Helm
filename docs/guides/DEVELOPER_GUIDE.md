@@ -575,7 +575,7 @@ Phase2では、実際のAPI統合を実装します：
    - `services/llm_service.py` を使用
    - `LLMService.analyze_structure()` で構造的問題検知
    - `LLMService.generate_tasks()` でタスク生成
-   - デフォルトモデル: `models/gemini-2.0-flash-001`
+   - デフォルトモデル: `models/gemini-1.5-flash` (gemini-2.0-flash-001は廃止予定のため更新)
 
 詳細は [Vertex AI設定ガイド](./backend/VERTEX_AI_SETUP.md) を参照してください。
 

@@ -1080,9 +1080,25 @@ async def escalate(request: EscalateRequest):
             )
         
         if not escalation_info:
+            # スコアと重要度を取得（analysis_dataの構造に対応）
+            score = analysis.get("score", 0)
+            if score == 0:
+                ensemble = analysis.get("ensemble", {})
+                if isinstance(ensemble, dict):
+                    score = ensemble.get("overall_score", 0)
+            severity = analysis.get("severity", "LOW")
+            ensemble = analysis.get("ensemble", {})
+            if isinstance(ensemble, dict) and not severity or severity == "LOW":
+                severity = ensemble.get("severity", severity)
+            
             raise ValidationError(
-                message="エスカレーション条件を満たしていません。",
-                details={"analysis_id": request.analysis_id, "score": analysis.get("score", 0)}
+                message=f"エスカレーション条件を満たしていません（スコア: {score}点、重要度: {severity}）。健全な意思決定が行われている場合や、構造的問題が検出されていない場合はエスカレーションされません。",
+                details={
+                    "analysis_id": request.analysis_id,
+                    "score": score,
+                    "severity": severity,
+                    "reason": "スコアが閾値未満、または構造的問題が検出されていません"
+                }
             )
         
         escalation_id = str(uuid.uuid4())

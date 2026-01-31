@@ -58,7 +58,8 @@ class VertexAIService:
             
             # Vertex AIの初期化
             aiplatform.init(project=self.project_id, location=self.location)
-            model = GenerativeModel("gemini-pro")
+            # 最新の推奨モデル: gemini-1.5-pro (gemini-proはレガシー)
+            model = GenerativeModel("gemini-1.5-pro")
             
             # プロンプトの構築
             prompt = self._build_analysis_prompt(meeting_data, chat_data)
@@ -127,7 +128,7 @@ class VertexAIService:
         
         # TODO: Gemini APIで説明文を生成
         # prompt = f"以下の構造的問題について、Executive向けに説明してください: {findings}"
-        # model = GenerativeModel("gemini-pro")
+        # model = GenerativeModel("gemini-1.5-pro")  # 最新の推奨モデル
         # response = model.generate_content(prompt)
         # return response.text
         

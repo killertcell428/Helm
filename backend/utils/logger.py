@@ -138,33 +138,49 @@ def setup_logger(name: str = "helm", log_level: str = None, use_json: bool = Non
     logger.addHandler(console_handler)
     
     # ファイルハンドラー（ログディレクトリが存在する場合）
+    # Cloud Run環境ではファイルログを無効化（環境変数で制御可能）
     log_dir = Path("logs")
-    if log_dir.exists() or os.getenv("ENABLE_FILE_LOGGING", "false").lower() == "true":
-        log_dir.mkdir(exist_ok=True)
+    enable_file_logging = os.getenv("ENABLE_FILE_LOGGING", "false").lower() == "true"
+    if enable_file_logging:
+        try:
+            log_dir.mkdir(exist_ok=True)
+        except (PermissionError, OSError) as e:
+            # ログディレクトリが作成できない場合はファイルログをスキップ
+            logger.warning(f"Failed to create log directory: {e}. File logging disabled.")
+            enable_file_logging = False
         log_file = log_dir / f"helm_{datetime.now().strftime('%Y%m%d')}.log"
         
-        file_handler = RotatingFileHandler(
-            log_file,
-            maxBytes=10 * 1024 * 1024,  # 10MB
-            backupCount=5
-        )
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(formatter)
-        file_handler.addFilter(context_filter)
-        logger.addHandler(file_handler)
-        
-        # JSON形式のログファイル（オプション）
-        if use_json:
-            json_log_file = log_dir / f"helm_{datetime.now().strftime('%Y%m%d')}.json.log"
-            json_file_handler = RotatingFileHandler(
-                json_log_file,
+        try:
+            file_handler = RotatingFileHandler(
+                log_file,
                 maxBytes=10 * 1024 * 1024,  # 10MB
                 backupCount=5
             )
-            json_file_handler.setLevel(logging.DEBUG)
-            json_file_handler.setFormatter(StructuredFormatter())
-            json_file_handler.addFilter(context_filter)
-            logger.addHandler(json_file_handler)
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(formatter)
+            file_handler.addFilter(context_filter)
+            logger.addHandler(file_handler)
+        except (PermissionError, OSError) as e:
+            # ログファイルが作成できない場合はファイルログをスキップ
+            logger.warning(f"Failed to create log file: {e}. File logging disabled.")
+            enable_file_logging = False
+        
+        # JSON形式のログファイル（オプション）
+        if use_json and enable_file_logging:
+            try:
+                json_log_file = log_dir / f"helm_{datetime.now().strftime('%Y%m%d')}.json.log"
+                json_file_handler = RotatingFileHandler(
+                    json_log_file,
+                    maxBytes=10 * 1024 * 1024,  # 10MB
+                    backupCount=5
+                )
+                json_file_handler.setLevel(logging.DEBUG)
+                json_file_handler.setFormatter(StructuredFormatter())
+                json_file_handler.addFilter(context_filter)
+                logger.addHandler(json_file_handler)
+            except (PermissionError, OSError) as e:
+                # JSONログファイルが作成できない場合はスキップ
+                logger.warning(f"Failed to create JSON log file: {e}. JSON file logging disabled.")
     
     return logger
 

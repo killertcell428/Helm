@@ -1,0 +1,51 @@
+# Google Cloud Build設定ファイル
+# このファイルを使用してCloud Buildで自動デプロイできます
+
+steps:
+  # Dockerイメージをビルド
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/reacha-app:$SHORT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/reacha-app:latest'
+      - '.'
+  
+  # DockerイメージをContainer Registryにプッシュ
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/reacha-app:$SHORT_SHA'
+  
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/reacha-app:latest'
+  
+  # Cloud Runにデプロイ
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'reacha-app'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/reacha-app:$SHORT_SHA'
+      - '--region'
+      - 'asia-northeast1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '2Gi'
+      - '--cpu'
+      - '2'
+      - '--timeout'
+      - '3600'
+      - '--max-instances'
+      - '10'
+
+images:
+  - 'gcr.io/$PROJECT_ID/reacha-app:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/reacha-app:latest'

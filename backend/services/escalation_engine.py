@@ -29,9 +29,20 @@ class EscalationEngine:
         Returns:
             エスカレーションが必要な場合True
         """
+        # analysis_dataの構造に対応: score, overall_score, ensemble.overall_score の順で確認
         overall_score = analysis_result.get("overall_score", 0)
-        overall_score = analysis_result.get("score", overall_score)  # scoreフィールドも確認
+        if overall_score == 0:
+            overall_score = analysis_result.get("score", 0)
+        if overall_score == 0:
+            ensemble = analysis_result.get("ensemble", {})
+            if isinstance(ensemble, dict):
+                overall_score = ensemble.get("overall_score", 0)
+        
         severity = analysis_result.get("severity", "LOW")
+        if not severity or severity == "LOW":
+            ensemble = analysis_result.get("ensemble", {})
+            if isinstance(ensemble, dict):
+                severity = ensemble.get("severity", severity)
         
         # スコアが閾値を超えている場合、または重要度がHIGHの場合
         if overall_score >= self.escalation_threshold:
@@ -74,9 +85,26 @@ class EscalationEngine:
             エスカレーション理由
         """
         findings = analysis_result.get("findings", [])
+        
+        # analysis_dataの構造に対応: score, overall_score, ensemble.overall_score の順で確認
         overall_score = analysis_result.get("overall_score", 0)
+        if overall_score == 0:
+            overall_score = analysis_result.get("score", 0)
+        if overall_score == 0:
+            ensemble = analysis_result.get("ensemble", {})
+            if isinstance(ensemble, dict):
+                overall_score = ensemble.get("overall_score", 0)
+        
         severity = analysis_result.get("severity", "LOW")
         urgency = analysis_result.get("urgency", "MEDIUM")
+        
+        # ensembleからも取得を試みる
+        ensemble = analysis_result.get("ensemble", {})
+        if isinstance(ensemble, dict):
+            if not severity or severity == "LOW":
+                severity = ensemble.get("severity", severity)
+            if not urgency or urgency == "LOW":
+                urgency = ensemble.get("urgency", urgency)
         
         if not findings:
             return "構造的問題が検出されました。"
@@ -117,13 +145,33 @@ class EscalationEngine:
         target_role = self.determine_target_role(analysis_result)
         reason = self.generate_escalation_reason(analysis_result)
         
+        # analysis_dataの構造に対応: score, overall_score, ensemble.overall_score の順で確認
+        overall_score = analysis_result.get("overall_score", 0)
+        if overall_score == 0:
+            overall_score = analysis_result.get("score", 0)
+        if overall_score == 0:
+            ensemble = analysis_result.get("ensemble", {})
+            if isinstance(ensemble, dict):
+                overall_score = ensemble.get("overall_score", 0)
+        
+        severity = analysis_result.get("severity", "MEDIUM")
+        urgency = analysis_result.get("urgency", "MEDIUM")
+        
+        # ensembleからも取得を試みる
+        ensemble = analysis_result.get("ensemble", {})
+        if isinstance(ensemble, dict):
+            if not severity or severity == "LOW":
+                severity = ensemble.get("severity", severity)
+            if not urgency or urgency == "LOW":
+                urgency = ensemble.get("urgency", urgency)
+        
         return {
             "analysis_id": analysis_id,
             "target_role": target_role,
             "reason": reason,
-            "severity": analysis_result.get("severity", "MEDIUM"),
-            "urgency": analysis_result.get("urgency", "MEDIUM"),
-            "score": analysis_result.get("overall_score", 0),
+            "severity": severity,
+            "urgency": urgency,
+            "score": overall_score,
             "created_at": datetime.now().isoformat(),
             "status": "pending"
         }

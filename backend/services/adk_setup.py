@@ -40,12 +40,14 @@ def get_model():
             aiplatform.init(project=project_id, location=location)
             # Vertex AI使用時はVertexAiLlm（公式APIに準拠）
             # 注意: VertexAiSessionServiceはAgent Engine IDが必要（Phase2でドキュメント化）
-            return Gemini(model="gemini-2.0-flash-001", vertex_ai=True)
+            # 最新の推奨モデル: gemini-1.5-flash (gemini-2.0-flash-001は廃止予定)
+            return Gemini(model="gemini-1.5-flash", vertex_ai=True)
     
     # デフォルトはGemini API（GOOGLE_API_KEYまたはGEMINI_API_KEY使用）
+    # 最新の推奨モデル: gemini-1.5-flash (gemini-2.0-flash-001は廃止予定)
     api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
     if api_key:
-        return Gemini(model="gemini-2.0-flash-001")
+        return Gemini(model="gemini-1.5-flash")
     
     return None  # APIキー未設定時はモックモード
 

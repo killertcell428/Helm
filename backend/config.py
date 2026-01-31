@@ -51,7 +51,7 @@ class Config:
     
     # LLM統合設定
     USE_LLM: bool = os.getenv("USE_LLM", "false").lower() == "true"  # LLM統合を有効化
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-3.0-pro")  # 使用するモデル
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-1.5-flash")  # 使用するモデル（gemini-2.0-flash-001は廃止予定のため更新）
     LLM_MAX_RETRIES: int = int(os.getenv("LLM_MAX_RETRIES", "3"))  # 最大リトライ回数
     LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "60"))  # タイムアウト時間（秒）
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.2"))  # 温度パラメータ

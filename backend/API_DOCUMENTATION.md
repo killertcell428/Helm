@@ -227,7 +227,7 @@ Google Chatログを取り込み、パース処理を実行します。
   "status": "completed",
   "is_llm_generated": true,
   "llm_status": "success",
-  "llm_model": "models/gemini-2.0-flash-001",
+  "llm_model": "models/gemini-1.5-flash",
   "multi_view": [
     {
       "role_id": "executive",
@@ -319,7 +319,7 @@ Google Chatログを取り込み、パース処理を実行します。
 - `severity`, `urgency`: ルールベースと各ロールの結果のうち、最も強い（安全側）を採用
 - `is_llm_generated`: マルチ視点LLM分析が実行されたかどうか（`true`/`false`）
 - `llm_status`: LLMの状態（`success`, `disabled`, `error`など）
-- `llm_model`: 使用されたLLMモデル名（例: `models/gemini-2.0-flash-001`）
+- `llm_model`: 使用されたLLMモデル名（例: `models/gemini-1.5-flash`）
 - `multi_view`: マルチ視点LLM分析の結果。4つのロール（Executive, Corp Planning, Staff, Governance）の評価結果を含む
   - `role_id`: ロールID
   - `weight`: ロールの重み（アンサンブル時に使用）
@@ -504,7 +504,7 @@ Executive承認後、AIが**ADK (Agent Development Kit)** を使用したマル�
   "updated_at": "2025-01-20T10:15:00",
   "is_llm_generated": true,
   "llm_status": "success",
-  "llm_model": "gemini-3.0-pro",
+  "llm_model": "gemini-1.5-pro",
   "output_file": {
     "filename": "execution_abc_tasks.json",
     "file_id": "execution_abc",

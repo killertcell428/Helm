@@ -52,28 +52,28 @@ def main():
     elif args.integration:
         pytest_cmd.append("tests/integration/")
         description = "統合テストを実行中..."
-        print("\n⚠️  注意: 統合テストを実行するには、バックエンドサーバーが起動している必要があります")
-        print("   コマンド: uvicorn main:app --reload --host 0.0.0.0 --port 8000")
+        print("\n[注意] 統合テストを実行するには、バックエンドサーバーが起動している必要があります")
+        print("       コマンド: uvicorn main:app --reload --host 0.0.0.0 --port 8000")
     elif args.e2e:
         pytest_cmd.append("tests/e2e/")
         description = "エンドツーエンドテストを実行中..."
-        print("\n⚠️  注意: エンドツーエンドテストを実行するには、バックエンドサーバーが起動している必要があります")
-        print("   コマンド: uvicorn main:app --reload --host 0.0.0.0 --port 8000")
+        print("\n[注意] エンドツーエンドテストを実行するには、バックエンドサーバーが起動している必要があります")
+        print("       コマンド: uvicorn main:app --reload --host 0.0.0.0 --port 8000")
     else:
         pytest_cmd.append("tests/")
         description = "すべてのテストを実行中..."
-        print("\n⚠️  注意: 統合テストとE2Eテストを実行するには、バックエンドサーバーが起動している必要があります")
-        print("   コマンド: uvicorn main:app --reload --host 0.0.0.0 --port 8000")
+        print("\n[注意] 統合テストとE2Eテストを実行するには、バックエンドサーバーが起動している必要があります")
+        print("       コマンド: uvicorn main:app --reload --host 0.0.0.0 --port 8000")
     
     # テスト実行
     success = run_command(pytest_cmd, description)
     
     if success:
-        print("\n✅ すべてのテストが成功しました！")
+        print("\n[OK] すべてのテストが成功しました。")
         if args.coverage:
-            print("\n📊 カバレッジレポート: htmlcov/index.html")
+            print("\n[INFO] カバレッジレポート: htmlcov/index.html")
     else:
-        print("\n❌ 一部のテストが失敗しました")
+        print("\n[ERROR] 一部のテストが失敗しました。")
         sys.exit(1)
 
 

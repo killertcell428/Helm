@@ -16,7 +16,7 @@
   },
   "is_llm_generated": false,  // ← false = モック, true = LLM生成
   "llm_status": "disabled",    // ← "disabled", "mock_fallback", "success"
-  "llm_model": null            // ← LLM生成の場合はモデル名（例: "gemini-3.0-pro"）
+  "llm_model": null            // ← LLM生成の場合はモデル名（例: "gemini-1.5-flash"）
 }
 ```
 
@@ -60,15 +60,15 @@
 #### 実際のLLMが動作している場合
 
 ```
-Vertex AI利用可能: project=xxx, model=gemini-3.0-pro
-LLM API呼び出し成功: model=gemini-3.0-pro, elapsed=2.34s
-✅ LLM分析完了（実際のLLM生成）: overall_score=75, model=gemini-3.0-pro
+Vertex AI利用可能: project=xxx, model=gemini-1.5-flash
+LLM API呼び出し成功: model=gemini-1.5-flash, elapsed=2.34s
+✅ LLM分析完了（実際のLLM生成）: overall_score=75, model=gemini-1.5-flash
 ```
 
 または
 
 ```
-✅ LLMタスク生成完了（実際のLLM生成）: total_tasks=5, model=gemini-3.0-pro
+✅ LLMタスク生成完了（実際のLLM生成）: total_tasks=5, model=gemini-1.5-flash
 ```
 
 ### 3. 出力ファイルで確認
@@ -95,7 +95,7 @@ LLM API呼び出し成功: model=gemini-3.0-pro, elapsed=2.34s
     ...
     "_is_mock": false,
     "_llm_status": "success",
-    "_llm_model": "gemini-3.0-pro"
+    "_llm_model": "gemini-1.5-flash"
   }
 }
 ```

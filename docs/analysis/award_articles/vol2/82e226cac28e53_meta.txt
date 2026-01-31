@@ -1,0 +1,4 @@
+Rank: 最優秀賞
+Name: FlatJam
+Team: IBUKI
+URL: https://zenn.dev/nayus/articles/82e226cac28e53

@@ -1,0 +1,4 @@
+Rank: Moonshot賞
+Name: KnockAI
+Team: KnockAI
+URL: https://zenn.dev/enostech/articles/8a4a3f2589afd7

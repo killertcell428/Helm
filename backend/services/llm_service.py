@@ -38,8 +38,8 @@ class LLMService:
         self.project_id = project_id or os.getenv("GOOGLE_CLOUD_PROJECT_ID") or config.GOOGLE_CLOUD_PROJECT_ID
         self.location = location or os.getenv("VERTEX_AI_LOCATION", "us-central1")
         # Gen AI SDK用のモデル名（models/プレフィックス付き、利用可能な最新安定版）
-        # デフォルト: models/gemini-2.0-flash-001 (Stable version)
-        self.model_name = model_name or os.getenv("LLM_MODEL", "models/gemini-2.0-flash-001")
+        # デフォルト: models/gemini-1.5-flash (gemini-2.0-flash-001は廃止予定のため更新)
+        self.model_name = model_name or os.getenv("LLM_MODEL", "models/gemini-1.5-flash")
         self.use_llm = os.getenv("USE_LLM", "false").lower() == "true"
         self.max_retries = int(os.getenv("LLM_MAX_RETRIES", "3"))
         self.timeout = int(os.getenv("LLM_TIMEOUT", "60"))
