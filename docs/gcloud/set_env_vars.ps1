@@ -5,9 +5,14 @@ Write-Host "=== Cloud Run環境変数設定 ===" -ForegroundColor Green
 Write-Host ""
 
 # 環境変数ファイルを作成
+# 注意: GOOGLE_API_KEYは実際のAPIキーに置き換えてください
 $envVarsFile = "env-vars.yaml"
+
+# 新しいAPIキーを入力してください
+$newApiKey = Read-Host "新しいGemini APIキーを入力してください"
+
 $envVarsContent = @"
-GOOGLE_API_KEY: AIzaSyCnf9uZEpMZSMK8fxRzIfhER1LI6ABujPQ
+GOOGLE_API_KEY: $newApiKey
 USE_LLM: 'true'
 GOOGLE_CLOUD_PROJECT_ID: helm-project-484105
 CORS_ORIGINS: 'http://localhost:3000,https://*.vercel.app'

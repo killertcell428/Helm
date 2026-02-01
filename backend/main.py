@@ -51,6 +51,33 @@ from services.agents.analysis_agent import execute_analysis_task
 from services.agents.notification_agent import execute_notification_task
 from services.agents.shared_context import SharedContext
 from services.escalation_engine import EscalationEngine
+# 拡張エスカレーションエンジン（エラーハンドリング付きでインポート）
+try:
+    from services.escalation_engine_enhanced import EnhancedEscalationEngine
+    ENHANCED_ESCALATION_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"EnhancedEscalationEngine not available: {e}, using legacy engine")
+    ENHANCED_ESCALATION_AVAILABLE = False
+    EnhancedEscalationEngine = None
+
+# データマスキングサービス（エラーハンドリング付きでインポート）
+try:
+    from services.data_masking import DataMaskingService
+    DATA_MASKING_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"DataMaskingService not available: {e}")
+    DATA_MASKING_AVAILABLE = False
+    DataMaskingService = None
+
+# 監査ログサービス（エラーハンドリング付きでインポート）
+try:
+    from services.audit_log import AuditLogService, AuditAction
+    AUDIT_LOG_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"AuditLogService not available: {e}")
+    AUDIT_LOG_AVAILABLE = False
+    AuditLogService = None
+    AuditAction = None
 from services.output_service import OutputService
 
 app = FastAPI(
@@ -357,7 +384,40 @@ analyzer = StructureAnalyzer(
     vertex_ai_service=vertex_ai_service,
     scoring_service=scoring_service,
 )  # ルールベース分析 + スコアリング
-escalation_engine = EscalationEngine(escalation_threshold=config.ESCALATION_THRESHOLD)  # エスカレーション判断エンジン（デモ用に50に設定）
+# エスカレーション判断エンジン（拡張機能を優先、エラー時は既存機能にフォールバック）
+try:
+    if ENHANCED_ESCALATION_AVAILABLE and EnhancedEscalationEngine:
+        escalation_engine = EnhancedEscalationEngine(
+            escalation_threshold=config.ESCALATION_THRESHOLD,
+            use_enhanced_features=True
+        )
+        logger.info("Using EnhancedEscalationEngine with advanced features")
+    else:
+        escalation_engine = EscalationEngine(escalation_threshold=config.ESCALATION_THRESHOLD)
+        logger.info("Using legacy EscalationEngine")
+except Exception as e:
+    logger.error(f"Failed to initialize escalation engine: {e}, using legacy engine", exc_info=True)
+    escalation_engine = EscalationEngine(escalation_threshold=config.ESCALATION_THRESHOLD)
+
+# データマスキングサービス（エラーハンドリング付きで初期化）
+data_masking_service = None
+if DATA_MASKING_AVAILABLE and DataMaskingService:
+    try:
+        data_masking_service = DataMaskingService()
+        logger.info("DataMaskingService initialized")
+    except Exception as e:
+        logger.warning(f"Failed to initialize DataMaskingService: {e}")
+        data_masking_service = None
+
+# 監査ログサービス（エラーハンドリング付きで初期化）
+audit_log_service = None
+if AUDIT_LOG_AVAILABLE and AuditLogService:
+    try:
+        audit_log_service = AuditLogService()
+        logger.info("AuditLogService initialized")
+    except Exception as e:
+        logger.warning(f"Failed to initialize AuditLogService: {e}")
+        audit_log_service = None
 workspace_service = GoogleWorkspaceService(
     credentials_path=config.GOOGLE_APPLICATION_CREDENTIALS,
     folder_id=config.GOOGLE_DRIVE_FOLDER_ID
@@ -762,7 +822,8 @@ async def ingest_meeting(request: MeetingIngestRequest):
                 details={"meeting_id": request.meeting_id}
             )
         
-        meeting_data = {
+        # データマスキング（エラーハンドリング付き）
+        masked_meeting_data = {
             "meeting_id": request.meeting_id,
             "transcript": transcript,
             "parsed_data": parsed_data,
@@ -770,7 +831,37 @@ async def ingest_meeting(request: MeetingIngestRequest):
             "ingested_at": datetime.now().isoformat(),
             "status": "ingested"
         }
-        meetings_db[request.meeting_id] = meeting_data
+        
+        if data_masking_service:
+            try:
+                masked_meeting_data = data_masking_service.mask_meeting_data(masked_meeting_data)
+                logger.info(f"Meeting data masked for {request.meeting_id}")
+            except Exception as e:
+                logger.warning(f"Failed to mask meeting data: {e}, using unmasked data")
+                # エラー時はマスキングなしで続行
+        
+        meetings_db[request.meeting_id] = masked_meeting_data
+        
+        # 監査ログの記録（エラーハンドリング付き）
+        if audit_log_service and AuditAction:
+            try:
+                # ユーザーIDとロールはリクエストから取得（デフォルト値を使用）
+                user_id = request.headers.get("X-User-ID", "system")
+                role = request.headers.get("X-User-Role", "system")
+                client_host = request.client.host if request.client else None
+                
+                audit_log_service.log(
+                    user_id=user_id,
+                    role=role,
+                    action=AuditAction.VIEW_MEETING,
+                    resource_type="meeting",
+                    resource_id=request.meeting_id,
+                    ip_address=client_host,
+                    details={"action": "ingest"}
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log audit: {e}")
+                # エラー時はログ記録をスキップして続行
         
         logger.info(f"Meeting {request.meeting_id} ingested successfully")
         
@@ -824,7 +915,8 @@ async def ingest_chat(request: ChatIngestRequest):
                 details={"chat_id": request.chat_id}
             )
         
-        chat_data = {
+        # データマスキング（エラーハンドリング付き）
+        masked_chat_data = {
             "chat_id": request.chat_id,
             "messages": messages,
             "parsed_data": parsed_data,
@@ -832,7 +924,37 @@ async def ingest_chat(request: ChatIngestRequest):
             "ingested_at": datetime.now().isoformat(),
             "status": "ingested"
         }
-        chats_db[request.chat_id] = chat_data
+        
+        if data_masking_service:
+            try:
+                masked_chat_data = data_masking_service.mask_chat_data(masked_chat_data)
+                logger.info(f"Chat data masked for {request.chat_id}")
+            except Exception as e:
+                logger.warning(f"Failed to mask chat data: {e}, using unmasked data")
+                # エラー時はマスキングなしで続行
+        
+        chats_db[request.chat_id] = masked_chat_data
+        
+        # 監査ログの記録（エラーハンドリング付き）
+        if audit_log_service and AuditAction:
+            try:
+                # ユーザーIDとロールはリクエストから取得（デフォルト値を使用）
+                user_id = request.headers.get("X-User-ID", "system")
+                role = request.headers.get("X-User-Role", "system")
+                client_host = request.client.host if request.client else None
+                
+                audit_log_service.log(
+                    user_id=user_id,
+                    role=role,
+                    action=AuditAction.VIEW_CHAT,
+                    resource_type="chat",
+                    resource_id=request.chat_id,
+                    ip_address=client_host,
+                    details={"action": "ingest"}
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log audit: {e}")
+                # エラー時はログ記録をスキップして続行
         
         logger.info(f"Chat {request.chat_id} ingested successfully")
         
@@ -961,17 +1083,38 @@ async def analyze(request: AnalyzeRequest):
                 }
             )
         
+        # 説明文に根拠引用を追加（エラーハンドリング付き）
+        explanation = ensemble_result.get("explanation", "")
+        findings = ensemble_result.get("findings", [])
+        
+        # 根拠引用サービスを使用（エラーハンドリング付き）
+        try:
+            if EVIDENCE_CITATION_AVAILABLE:
+                from services.evidence_citation import EvidenceCitationService
+                evidence_service = EvidenceCitationService()
+                explanation = evidence_service.add_evidence_citations(
+                    explanation,
+                    findings,
+                    meeting_parsed,
+                    chat_parsed
+                )
+                logger.info(f"Evidence citations added to explanation for analysis {analysis_id}")
+        except Exception as e:
+            logger.warning(f"Failed to add evidence citations: {e}, using original explanation")
+            # エラー時は元の説明文を使用（フォールバック）
+        
         analysis_data = {
             "analysis_id": analysis_id,
             "meeting_id": request.meeting_id,
             "chat_id": request.chat_id,
             # アンサンブル結果をトップレベルに反映
-            "findings": ensemble_result.get("findings", []),
+            "findings": findings,
             "scores": rule_result.get("scores", {}),
             "score": ensemble_result.get("overall_score", 0),
+            "overall_score": ensemble_result.get("overall_score", 0),  # 拡張エスカレーション用
             "severity": ensemble_result.get("severity", "MEDIUM"),
             "urgency": ensemble_result.get("urgency", "MEDIUM"),
-            "explanation": ensemble_result.get("explanation", ""),
+            "explanation": explanation,  # 根拠引用付きの説明文
             "created_at": rule_result.get("created_at", datetime.now().isoformat()),
             "status": "completed",
             # LLM生成かモックかを明示（マルチロール結果が1つでもあればLLM利用とみなす）
@@ -987,6 +1130,9 @@ async def analyze(request: AnalyzeRequest):
                 "reasons": ensemble_result.get("reasons", []),
                 "contributing_roles": ensemble_result.get("contributing_roles", []),
             },
+            # ルールベースとLLMスコア（確信度計算用）
+            "rule_score": rule_result.get("overall_score", 0),
+            "llm_score": sum(r.get("overall_score", 0) * r.get("weight", 0) for r in multi_view_results) / max(sum(r.get("weight", 0) for r in multi_view_results), 1) if multi_view_results else 0,
         }
         
         analyses_db[analysis_id] = analysis_data
@@ -1028,6 +1174,26 @@ async def analyze(request: AnalyzeRequest):
         
         logger.info(f"Analysis {analysis_id} completed: score={ensemble_result.get('overall_score', 0)}, severity={ensemble_result.get('severity', 'MEDIUM')}")
         
+        # 監査ログの記録（エラーハンドリング付き）
+        if audit_log_service and AuditAction:
+            try:
+                user_id = request.headers.get("X-User-ID", "system")
+                role = request.headers.get("X-User-Role", "system")
+                client_host = request.client.host if request.client else None
+                
+                audit_log_service.log(
+                    user_id=user_id,
+                    role=role,
+                    action=AuditAction.VIEW_ANALYSIS,
+                    resource_type="analysis",
+                    resource_id=analysis_id,
+                    ip_address=client_host,
+                    details={"meeting_id": request.meeting_id, "chat_id": request.chat_id}
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log audit: {e}")
+                # エラー時はログ記録をスキップして続行
+        
         return analysis_data
     except HelmException:
         raise
@@ -1068,16 +1234,35 @@ async def escalate(request: EscalateRequest):
                 resource_id=request.analysis_id
             )
         
-        # エスカレーション判断エンジンを使用
+        # エスカレーション判断エンジンを使用（拡張機能を統合、エラーハンドリング付き）
+        escalation_info = None
         try:
-            escalation_info = escalation_engine.create_escalation(request.analysis_id, analysis)
+            # 拡張エスカレーションエンジンを使用（会議データとチャットデータを渡す）
+            meeting = meetings_db.get(analysis.get("meeting_id"))
+            chat = chats_db.get(analysis.get("chat_id")) if analysis.get("chat_id") else None
+            
+            escalation_info = escalation_engine.create_escalation(
+                request.analysis_id,
+                analysis,
+                meeting,
+                chat
+            )
         except Exception as e:
             logger.error(f"Failed to create escalation: {e}", exc_info=True)
-            raise ServiceError(
-                message=f"エスカレーション判断に失敗しました: {str(e)}",
-                service_name="EscalationEngine",
-                details={"analysis_id": request.analysis_id}
-            )
+            # エラー時は既存のメソッドで再試行（フォールバック）
+            try:
+                if hasattr(escalation_engine, 'legacy_engine') and escalation_engine.legacy_engine:
+                    escalation_info = escalation_engine.legacy_engine.create_escalation(request.analysis_id, analysis)
+                elif hasattr(escalation_engine, 'create_escalation'):
+                    # 拡張エンジンの基本メソッドを試行
+                    escalation_info = escalation_engine.create_escalation(request.analysis_id, analysis)
+            except Exception as e2:
+                logger.error(f"Failed to create escalation with fallback: {e2}", exc_info=True)
+                raise ServiceError(
+                    message=f"エスカレーション判断に失敗しました: {str(e)}",
+                    service_name="EscalationEngine",
+                    details={"analysis_id": request.analysis_id}
+                )
         
         if not escalation_info:
             # スコアと重要度を取得（analysis_dataの構造に対応）
@@ -1103,21 +1288,61 @@ async def escalate(request: EscalateRequest):
         
         escalation_id = str(uuid.uuid4())
         
+        # エスカレーションデータを構築（拡張機能のフィールドも含める）
         escalation_data = {
             "escalation_id": escalation_id,
             "analysis_id": request.analysis_id,
-            "target_role": escalation_info["target_role"],
-            "reason": escalation_info["reason"],
+            "target_role": escalation_info.get("target_role", escalation_info.get("target_roles", ["Executive"])[0] if isinstance(escalation_info.get("target_roles"), list) else "Executive"),
+            "reason": escalation_info.get("reason", "構造的問題が検出されました。"),
             "severity": escalation_info.get("severity", "MEDIUM"),
             "urgency": escalation_info.get("urgency", "MEDIUM"),
             "score": escalation_info.get("score", 0),
-            "created_at": escalation_info["created_at"],
-            "status": "pending"
+            "created_at": escalation_info.get("created_at", datetime.now().isoformat()),
+            "status": escalation_info.get("status", "pending")
         }
+        
+        # 拡張機能のフィールドを追加（存在する場合）
+        if "stage" in escalation_info:
+            escalation_data["stage"] = escalation_info["stage"]
+        if "stage_name" in escalation_info:
+            escalation_data["stage_name"] = escalation_info["stage_name"]
+        if "target_roles" in escalation_info:
+            escalation_data["target_roles"] = escalation_info["target_roles"]
+        if "action_required" in escalation_info:
+            escalation_data["action_required"] = escalation_info["action_required"]
+        if "confidence" in escalation_info:
+            escalation_data["confidence"] = escalation_info["confidence"]
+        if "confidence_level" in escalation_info:
+            escalation_data["confidence_level"] = escalation_info["confidence_level"]
+        if "question" in escalation_info:
+            escalation_data["question"] = escalation_info["question"]
+        if "type" in escalation_info:
+            escalation_data["type"] = escalation_info["type"]
         
         escalations_db[escalation_id] = escalation_data
         
-        logger.info(f"Escalation {escalation_id} created: target_role={escalation_info['target_role']}")
+        target_role = escalation_data.get("target_role", "Executive")
+        logger.info(f"Escalation {escalation_id} created: target_role={target_role}")
+        
+        # 監査ログの記録（エラーハンドリング付き）
+        if audit_log_service and AuditAction:
+            try:
+                user_id = request.headers.get("X-User-ID", "system")
+                role = request.headers.get("X-User-Role", "system")
+                client_host = request.client.host if request.client else None
+                
+                audit_log_service.log(
+                    user_id=user_id,
+                    role=role,
+                    action=AuditAction.ESCALATE,
+                    resource_type="escalation",
+                    resource_id=escalation_id,
+                    ip_address=client_host,
+                    details={"analysis_id": request.analysis_id, "target_role": target_role}
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log audit: {e}")
+                # エラー時はログ記録をスキップして続行
         
         return escalation_data
     except HelmException:

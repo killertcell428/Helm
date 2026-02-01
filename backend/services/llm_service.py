@@ -37,9 +37,15 @@ class LLMService:
         """
         self.project_id = project_id or os.getenv("GOOGLE_CLOUD_PROJECT_ID") or config.GOOGLE_CLOUD_PROJECT_ID
         self.location = location or os.getenv("VERTEX_AI_LOCATION", "us-central1")
-        # Gen AI SDK用のモデル名（models/プレフィックス付き、利用可能な最新安定版）
-        # デフォルト: models/gemini-1.5-flash (gemini-2.0-flash-001は廃止予定のため更新)
-        self.model_name = model_name or os.getenv("LLM_MODEL", "models/gemini-1.5-flash")
+        # Gen AI SDK用のモデル名（プレフィックスなし、利用可能な最新安定版）
+        # デフォルト: gemini-3-flash-preview (Gemini 3 Flash - 最新の推論モデル)
+        # 注意: Gen AI SDKでは models/ プレフィックスは使用しない
+        # Gemini 3シリーズ: gemini-3-pro-preview, gemini-3-flash-preview
+        default_model = os.getenv("LLM_MODEL", "gemini-3-flash-preview")
+        # もし models/ プレフィックスが含まれている場合は削除
+        if default_model.startswith("models/"):
+            default_model = default_model.replace("models/", "")
+        self.model_name = model_name or default_model
         self.use_llm = os.getenv("USE_LLM", "false").lower() == "true"
         self.max_retries = int(os.getenv("LLM_MAX_RETRIES", "3"))
         self.timeout = int(os.getenv("LLM_TIMEOUT", "60"))
@@ -248,11 +254,12 @@ class LLMService:
             logger.warning("Gen AI SDKが利用できません（GOOGLE_API_KEY未設定またはgoogle-generativeai未インストール）")
             return None
         
-        # モデル名をGen AI SDK用に調整（models/プレフィックスを追加）
+        # モデル名をGen AI SDK用に調整（models/プレフィックスを削除）
+        # Gen AI SDKでは models/ プレフィックスは不要（エラーの原因）
         genai_model_name = model
-        if not genai_model_name.startswith("models/"):
-            # プレフィックスがない場合は追加
-            genai_model_name = f"models/{genai_model_name}"
+        if genai_model_name.startswith("models/"):
+            # プレフィックスが含まれている場合は削除
+            genai_model_name = genai_model_name.replace("models/", "")
             logger.info(f"モデル名を調整: {model} → {genai_model_name}")
         
         for attempt in range(self.max_retries):

@@ -163,7 +163,9 @@ try {
     
     # gcloud run deployコマンドを直接実行
     # PowerShellの行継続を使わず、1行で構築して実行
-    $deployCommand = "gcloud run deploy $SERVICE_NAME --image `"$fullImageName`" --region $REGION --platform managed --allow-unauthenticated --memory 2Gi --cpu 2 --timeout 3600 --max-instances 10 --set-env-vars OUTPUT_DIR=/tmp/outputs"
+    # 注意: --set-env-varsは既存の環境変数をすべて置き換えるため、--update-env-varsを使用しない
+    # 環境変数はデプロイ後に別途設定する必要がある
+    $deployCommand = "gcloud run deploy $SERVICE_NAME --image `"$fullImageName`" --region $REGION --platform managed --allow-unauthenticated --memory 2Gi --cpu 2 --timeout 3600 --max-instances 10 --update-env-vars OUTPUT_DIR=/tmp/outputs"
     
     Write-Host "Executing: $deployCommand" -ForegroundColor Gray
     Invoke-Expression $deployCommand

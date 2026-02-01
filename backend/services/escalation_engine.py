@@ -145,7 +145,7 @@ class EscalationEngine:
         target_role = self.determine_target_role(analysis_result)
         reason = self.generate_escalation_reason(analysis_result)
         
-        # analysis_dataの構造に対応: score, overall_score, ensemble.overall_score の順で確認
+        # analysis_dataの構造に対応: overall_score > score > ensemble.overall_score の順で確認
         overall_score = analysis_result.get("overall_score", 0)
         if overall_score == 0:
             overall_score = analysis_result.get("score", 0)
@@ -153,6 +153,12 @@ class EscalationEngine:
             ensemble = analysis_result.get("ensemble", {})
             if isinstance(ensemble, dict):
                 overall_score = ensemble.get("overall_score", 0)
+        
+        # スコアを数値に変換（文字列の場合に対応）
+        try:
+            overall_score = int(float(overall_score))
+        except (ValueError, TypeError):
+            overall_score = 0
         
         severity = analysis_result.get("severity", "MEDIUM")
         urgency = analysis_result.get("urgency", "MEDIUM")

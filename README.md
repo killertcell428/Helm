@@ -134,15 +134,34 @@ Google Meet → 議事録・チャット取得 → マルチ視点評価（ル�
 
 このアプローチにより、単一の評価軸では見落としがちな問題も、複数の視点から検知できるようになります。
 
+## 🚀 デプロイ済みサービス
+
+### 本番環境
+
+- **バックエンドAPI**: [https://helm-api-dsy6lzllhq-an.a.run.app](https://helm-api-dsy6lzllhq-an.a.run.app)
+  - APIドキュメント: [https://helm-api-dsy6lzllhq-an.a.run.app/docs](https://helm-api-dsy6lzllhq-an.a.run.app/docs)
+  - デプロイ先: Google Cloud Run (asia-northeast1)
+  - LLM: Gemini 3 Flash Preview
+
+- **フロントエンド**: [https://v0-helm-pdca-demo.vercel.app](https://v0-helm-pdca-demo.vercel.app)
+  - デプロイ先: Vercel
+  - フレームワーク: Next.js 16
+
+### デプロイ日
+
+- **バックエンド**: 2025年2月1日
+- **フロントエンド**: 2025年1月31日
+
 ## 技術スタック
 
 ### バックエンド
 - **フレームワーク**: FastAPI
-- **言語**: Python 3.12
-- **LLM**: Google Gemini 2.0 Flash (Gen AI SDK)
+- **言語**: Python 3.11
+- **LLM**: Google Gemini 3 Flash Preview (Gen AI SDK)
 - **ADK**: Google Agent Development Kit (`google-adk`) - マルチエージェントシステム
 - **Google API**: `google-api-python-client`, `google-auth-oauthlib`
 - **テスト**: pytest
+- **デプロイ**: Google Cloud Run
 
 ### フロントエンド
 - **フレームワーク**: Next.js 16.0.10 (Turbopack)
@@ -162,6 +181,8 @@ Google Meet → 議事録・チャット取得 → マルチ視点評価（ル�
 
 ## 提出物要件
 
-- [ ] GitHubリポジトリ（公開）
-- [ ] デプロイURL（動作確認可能）
+- [x] GitHubリポジトリ（公開）
+- [x] デプロイURL（動作確認可能）
+  - バックエンド: https://helm-api-dsy6lzllhq-an.a.run.app
+  - フロントエンド: https://v0-helm-pdca-demo.vercel.app
 - [ ] Zenn記事（概要、アーキテクチャ図、デモ動画3分）

@@ -29,10 +29,12 @@ class Config:
     RETRY_INITIAL_DELAY: float = float(os.getenv("RETRY_INITIAL_DELAY", "1.0"))
     
     # CORS設定
-    CORS_ORIGINS: list = os.getenv(
+    # 環境変数から取得、デフォルトはlocalhostとVercelのURL
+    _cors_origins_str = os.getenv(
         "CORS_ORIGINS",
-        "http://localhost:3000,https://*.vercel.app"
-    ).split(",")
+        "http://localhost:3000,https://v0-helm-pdca-demo.vercel.app"
+    )
+    CORS_ORIGINS: list = [origin.strip() for origin in _cors_origins_str.split(",") if origin.strip()]
     
     # Google Cloud設定
     GOOGLE_CLOUD_PROJECT_ID: Optional[str] = os.getenv("GOOGLE_CLOUD_PROJECT_ID")
@@ -51,7 +53,7 @@ class Config:
     
     # LLM統合設定
     USE_LLM: bool = os.getenv("USE_LLM", "false").lower() == "true"  # LLM統合を有効化
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-1.5-flash")  # 使用するモデル（gemini-2.0-flash-001は廃止予定のため更新）
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-3-flash-preview")  # 使用するモデル（Gemini 3 Flash - 最新の推論モデル、Gen AI SDKではmodels/プレフィックス不要）
     LLM_MAX_RETRIES: int = int(os.getenv("LLM_MAX_RETRIES", "3"))  # 最大リトライ回数
     LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "60"))  # タイムアウト時間（秒）
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.2"))  # 温度パラメータ

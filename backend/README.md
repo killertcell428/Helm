@@ -2,6 +2,17 @@
 
 HelmのバックエンドAPIサーバー。Googleサービス統合とAI自律実行を提供します。
 
+## 🚀 デプロイ済みサービス
+
+**本番環境**: [https://helm-api-dsy6lzllhq-an.a.run.app](https://helm-api-dsy6lzllhq-an.a.run.app)
+
+- **APIドキュメント**: [https://helm-api-dsy6lzllhq-an.a.run.app/docs](https://helm-api-dsy6lzllhq-an.a.run.app/docs)
+- **デプロイ先**: Google Cloud Run (asia-northeast1)
+- **LLM**: Gemini 3 Flash Preview
+- **デプロイ日**: 2025年2月1日
+
+詳細は [デプロイ関連ドキュメント](../docs/gcloud/) を参照してください。
+
 ## 📚 ドキュメント
 
 - [🚀 クイックスタートガイド](../QUICKSTART.md) - 初心者向け起動手順
@@ -91,7 +102,14 @@ Google API統合が完了しました：
 - ✅ Google Docs API（ドキュメント作成）
 - ✅ Google Chat API（メッセージ取得）
 - ✅ Google Meet API（議事録取得）
-- ✅ LLM統合（Gemini / Gen AI SDK）
+- ✅ LLM統合（Gemini 3 Flash Preview / Gen AI SDK）
+
+### 本番デプロイ完了 ✅
+
+- ✅ Google Cloud Runへのデプロイ完了
+- ✅ Gemini 3 Flash Previewが正常に動作
+- ✅ マルチ視点LLM分析が正常に完了
+- ✅ 環境変数設定完了（GOOGLE_API_KEY, USE_LLM, GOOGLE_CLOUD_PROJECT_ID）
 
 **詳細**: [REAL_DATA_IMPLEMENTATION.md](./REAL_DATA_IMPLEMENTATION.md) を参照してください。
 

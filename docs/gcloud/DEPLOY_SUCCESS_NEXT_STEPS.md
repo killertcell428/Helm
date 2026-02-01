@@ -21,10 +21,11 @@
 
 ```powershell
 # 基本環境変数を設定（CORS_ORIGINSの*は特殊文字のため、後でGoogle Cloud Consoleから追加）
+# 重要: YOUR_NEW_API_KEY_HERE を新しいGemini APIキーに置き換えてください
 gcloud run services update helm-api `
   --region asia-northeast1 `
-  --set-env-vars `
-    "GOOGLE_API_KEY=AIzaSyCnf9uZEpMZSMK8fxRzIfhER1LI6ABujPQ,USE_LLM=true,GOOGLE_CLOUD_PROJECT_ID=helm-project-484105,CORS_ORIGINS=http://localhost:3000,OUTPUT_DIR=/tmp/outputs"
+  --update-env-vars `
+    "GOOGLE_API_KEY=YOUR_NEW_API_KEY_HERE,USE_LLM=true,GOOGLE_CLOUD_PROJECT_ID=helm-project-484105,CORS_ORIGINS=http://localhost:3000,OUTPUT_DIR=/tmp/outputs"
 ```
 
 **注意**: `CORS_ORIGINS`に`https://*.vercel.app`を追加する場合は、Google Cloud Consoleから手動で設定してください：
