@@ -373,6 +373,6 @@
 
 ## 参考資料
 
-- `Dev/docs/memo.md` - 審査員からの指摘事項
+- 審査員からの指摘事項は内部メモのためリポジトリに含みません
 - `Dev/backend/services/escalation_engine.py` - エスカレーションエンジン
 - `Dev/backend/services/ensemble_scoring.py` - アンサンブルスコアリング

@@ -71,3 +71,8 @@ htmlcov/
 *.tmp
 *.temp
 .cache/
+
+# 内部ドキュメント（リポジトリに含めない）
+docs/Documents/
+docs/memo.md
+__old/

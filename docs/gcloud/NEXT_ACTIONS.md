@@ -41,20 +41,20 @@
   - 実装のハイライト
   - 技術スタック
   - デモの説明
-  - 参考: [ZENN_ARTICLE.md](../ZENN_ARTICLE.md)
+  - 参考: [ZENN記事_v03.md](../ZENN記事_v03.md)
 - [ ] YouTube動画用の台本作成
   - デモの流れ
   - 技術的な説明ポイント
   - 実装のハイライト
-  - 参考: [YOUTUBE_SCRIPT.md](../YOUTUBE_SCRIPT.md)
+  - 参考: [YOUTUBE原稿_v01.md](../YOUTUBE原稿_v01.md)
 - [ ] デモ動画の準備
   - スクリーンキャプチャ
   - ナレーション
   - 編集
 
 **参考ドキュメント**:
-- [ZENN_ARTICLE.md](../ZENN_ARTICLE.md) - Zenn記事のドラフト
-- [YOUTUBE_SCRIPT.md](../YOUTUBE_SCRIPT.md) - YouTube台本のドラフト
+- [ZENN記事_v03.md](../ZENN記事_v03.md) - Zenn記事（現行版）
+- [YOUTUBE原稿_v01.md](../YOUTUBE原稿_v01.md) - YouTube台本
 - [原稿_v01.md](../原稿_v01.md) - 原稿
 
 ## 🟢 第3優先（時間があれば）

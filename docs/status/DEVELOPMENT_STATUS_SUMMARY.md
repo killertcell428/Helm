@@ -12,9 +12,9 @@
 #### 1. 記事作成（Zenn）
 - **現状**: v02完成、v03改善版作成計画あり
 - **ファイル**: 
-  - `Dev/docs/ZENN_ARTICLE_v02.md` (721行、完成版)
+  - `Dev/docs/ZENN記事_v03.md` (Zenn記事・現行版)
   - `.cursor/plans/zenn記事v03改善版作成_c15bc484.plan.md` (改善計画)
-  - `Dev/docs/memo.md` (レビュー内容と改善案)
+  - レビュー内容と改善案は内部メモのためリポジトリに含みません
 - **改善ポイント**:
   - TL;DR追加
   - 用語ミニ辞書配置
@@ -26,7 +26,7 @@
 
 #### 2. YouTube動画作成
 - **現状**: 台本作成済み
-- **ファイル**: `Dev/docs/YOUTUBE_SCRIPT.md` (450行)
+- **ファイル**: `Dev/docs/YOUTUBE原稿_v01.md` (YouTube動画台本)
 - **内容**: 
   - 7-8分のデモンストレーション動画
   - オープニング、問題提起、機能説明、デモ、技術ポイント、効果、クロージング
@@ -79,7 +79,7 @@
   - デモ動画の詳細手順追加
   - 技術的な説明ポイントの強化
   - ナレーション原稿の推敲
-- **参考**: `Dev/docs/YOUTUBE_SCRIPT.md`
+- **参考**: `Dev/docs/YOUTUBE原稿_v01.md`
 
 #### 3. フロントエンドの改善
 - **見積もり**: 1-2日
@@ -233,9 +233,8 @@
 - `Dev/docs/status/PROJECT_STATUS.md` - プロジェクト状況
 
 ### 記事・動画
-- `Dev/docs/ZENN_ARTICLE_v02.md` - Zenn記事v02（完成版）
-- `Dev/docs/YOUTUBE_SCRIPT.md` - YouTube動画台本
-- `Dev/docs/memo.md` - レビュー内容と改善案
+- `Dev/docs/ZENN記事_v03.md` - Zenn記事（現行版）
+- `Dev/docs/YOUTUBE原稿_v01.md` - YouTube動画台本
 
 ### デプロイ・インフラ
 - `Dev/backend/LLM_STATUS_CHECK.md` - LLM統合状態確認方法

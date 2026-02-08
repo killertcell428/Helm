@@ -161,6 +161,6 @@
 
 ## 参考資料
 
-- `Dev/docs/memo.md` - 審査員からの指摘事項
+- 審査員からの指摘事項は内部メモのためリポジトリに含みません
 - `Dev/docs/design/EVALUATION_AND_GUARDRAIL_DESIGN.md` - 設計ドキュメント
 - `Dev/backend/services/escalation_engine.py` - 既存のエスカレーションエンジン
