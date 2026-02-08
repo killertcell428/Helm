@@ -185,9 +185,11 @@ Google Meet → 議事録・チャット取得 → マルチ視点評価（ル�
 
 ## 提出物要件
 
-- [X] GitHubリポジトリ（公開）
-- [X] デプロイURL（動作確認可能）
+- [x] GitHubリポジトリ（公開）
+- [x] デプロイURL（動作確認可能）
   - バックエンド: https://helm-api-dsy6lzllhq-an.a.run.app
   - フロントエンド: https://v0-helm-pdca-demo.vercel.app
-- [ ] Zenn記事（概要、アーキテクチャ図、デモ動画3分）
-  - [ ] https://zenn.dev/charles_389no/articles/f4adff7b7bcaf8
+- [ ] Zenn記事（概要、アーキテクチャ図、デモ動画3分）— 制作依頼中／進行中
+  - 予定: https://zenn.dev/charles_389no/articles/f4adff7b7bcaf8
+
+**注**: 来週の提出最終日を断面として、開発・デプロイは完了しています。Zenn記事・デモ動画は制作担当者に依頼中です。

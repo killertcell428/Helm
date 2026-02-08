@@ -10,11 +10,10 @@ Helmプロジェクトの主要ドキュメント一覧です。
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - システム全体の設計
 
 ### 進捗・実装状況
-- [docs/status/WEEK2_SUMMARY.md](./docs/status/WEEK2_SUMMARY.md) - Week 2の実装サマリー ⭐ **最新**
-- [docs/status/WEEK2_PROGRESS.md](./docs/status/WEEK2_PROGRESS.md) - Week 2の詳細な進捗記録
-- [docs/status/WEEK2_PLAN.md](./docs/status/WEEK2_PLAN.md) - Week 2の実装計画
-- [docs/status/PROJECT_STATUS.md](./docs/status/PROJECT_STATUS.md) - プロジェクト状況 ⭐ **最新**
-- [docs/status/NEXT_STEPS.md](./docs/status/NEXT_STEPS.md) - 次のステップ候補 ⭐ **最新**
+- [docs/status/DEVELOPMENT_STATUS_SUMMARY.md](./docs/status/DEVELOPMENT_STATUS_SUMMARY.md) - 開発状況サマリー（提出完了断面）⭐ **最新**
+- [docs/status/PROJECT_STATUS.md](./docs/status/PROJECT_STATUS.md) - プロジェクト状況
+- [docs/status/NEXT_STEPS.md](./docs/status/NEXT_STEPS.md) - 次のステップ（提出後タスク含む）
+- [docs/status/WEEK2_SUMMARY.md](./docs/status/WEEK2_SUMMARY.md) - Week 2の実装サマリー
 - [docs/status/CLEANUP_SUMMARY.md](./docs/status/CLEANUP_SUMMARY.md) - ファイル整理サマリー
 
 ### 実装詳細

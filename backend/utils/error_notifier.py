@@ -45,10 +45,22 @@ class LogFileNotifier(ErrorNotifier):
         if enabled is None:
             enabled = os.getenv("ERROR_NOTIFICATION_ENABLED", "true").lower() == "true"
         self.enabled = enabled
-        
+        self.error_log_file = self.log_dir / "error_notifications.json"
+
+        # Cloud Run など書き込み不可環境ではファイル通知を無効化
         if self.enabled:
-            self.log_dir.mkdir(exist_ok=True)
-            self.error_log_file = self.log_dir / "error_notifications.json"
+            try:
+                self.log_dir.mkdir(exist_ok=True)
+                # 実際に書けるかテスト（Cloud Run の / は読み取り専用）
+                test_file = self.log_dir / ".write_test"
+                test_file.write_text("")
+                test_file.unlink()
+            except (PermissionError, OSError) as e:
+                logger.info(
+                    f"Error notification file logging disabled (read-only env): {e}. "
+                    "Errors will still be logged to stdout."
+                )
+                self.enabled = False
     
     def notify(self, error_data: Dict[str, Any]) -> bool:
         """ログファイルにエラー通知を記録"""

@@ -28,6 +28,9 @@ gcloud/
 - **README_DEPLOY.md** - クイックスタートガイド
 - **DEPLOY_GCLOUD_API_KEY.md** - APIキー設定ガイド
 - **OUTPUTS_SYNC.md** - 開発環境のoutputs同期について
+- **LOGGING_AND_MONITORING.md** - ログの見方・Cloud Run モニタリング
+- **ENV_VARS_REFERENCE.md** - 環境変数一覧
+- **NEXT_ACTIONS.md** - 次のアクション（優先順位順）
 
 ### スクリプト（scripts/）
 

@@ -525,6 +525,45 @@ LOG_LEVEL=INFO
 ENABLE_FILE_LOGGING=false
 ```
 
+**注意**: Cloud Run では標準出力が Cloud Logging に送られるため、通常は `false` のままで問題ありません。
+
+---
+
+### `LOG_FORMAT`
+
+**説明**: ログ出力形式。`json` にすると Cloud Logging で request_id や endpoint による検索がしやすくなります。
+
+**必須**: いいえ
+
+**デフォルト値**: `text`
+
+**有効な値**: `text`, `json`
+
+**例**:
+```bash
+# Cloud Run 推奨
+LOG_FORMAT=json
+```
+
+**参考**: [ログとモニタリング](./LOGGING_AND_MONITORING.md)
+
+---
+
+### `ERROR_NOTIFICATION_ENABLED`
+
+**説明**: エラー発生時にファイル（`logs/error_notifications.json`）へ記録するかどうか。
+
+**必須**: いいえ
+
+**デフォルト値**: `true`（ただし Cloud Run など書き込み不可の環境では自動で無効になります）
+
+**有効な値**: `true`, `false`
+
+**例**:
+```bash
+ERROR_NOTIFICATION_ENABLED=false
+```
+
 ---
 
 ## Cloud Runでの環境変数設定方法
