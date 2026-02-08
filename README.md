@@ -43,6 +43,7 @@ Executiveの承認後、Helmは**ADK (Agent Development Kit)** を使用した�
 ## 📚 ドキュメント
 
 **初めての方はこちらから:**
+
 - [🚀 クイックスタートガイド](./docs/guides/QUICKSTART.md) - 初心者向け起動手順
 - [📐 アーキテクチャドキュメント](./ARCHITECTURE.md) - システム全体の設計
 - [📑 ドキュメント一覧](./DOCUMENTATION_INDEX.md) - 全ドキュメントのインデックス
@@ -139,11 +140,12 @@ Google Meet → 議事録・チャット取得 → マルチ視点評価（ル�
 ### 本番環境
 
 - **バックエンドAPI**: [https://helm-api-dsy6lzllhq-an.a.run.app](https://helm-api-dsy6lzllhq-an.a.run.app)
+
   - APIドキュメント: [https://helm-api-dsy6lzllhq-an.a.run.app/docs](https://helm-api-dsy6lzllhq-an.a.run.app/docs)
   - デプロイ先: Google Cloud Run (asia-northeast1)
   - LLM: Gemini 3 Flash Preview
-
 - **フロントエンド**: [https://v0-helm-pdca-demo.vercel.app](https://v0-helm-pdca-demo.vercel.app)
+
   - デプロイ先: Vercel
   - フレームワーク: Next.js 16
 
@@ -155,6 +157,7 @@ Google Meet → 議事録・チャット取得 → マルチ視点評価（ル�
 ## 技術スタック
 
 ### バックエンド
+
 - **フレームワーク**: FastAPI
 - **言語**: Python 3.11
 - **LLM**: Google Gemini 3 Flash Preview (Gen AI SDK)
@@ -164,6 +167,7 @@ Google Meet → 議事録・チャット取得 → マルチ視点評価（ル�
 - **デプロイ**: Google Cloud Run
 
 ### フロントエンド
+
 - **フレームワーク**: Next.js 16.0.10 (Turbopack)
 - **言語**: TypeScript
 - **UI**: React, Tailwind CSS
@@ -181,8 +185,9 @@ Google Meet → 議事録・チャット取得 → マルチ視点評価（ル�
 
 ## 提出物要件
 
-- [x] GitHubリポジトリ（公開）
-- [x] デプロイURL（動作確認可能）
+- [X] GitHubリポジトリ（公開）
+- [X] デプロイURL（動作確認可能）
   - バックエンド: https://helm-api-dsy6lzllhq-an.a.run.app
   - フロントエンド: https://v0-helm-pdca-demo.vercel.app
 - [ ] Zenn記事（概要、アーキテクチャ図、デモ動画3分）
+  - [ ] https://zenn.dev/charles_389no/articles/f4adff7b7bcaf8
