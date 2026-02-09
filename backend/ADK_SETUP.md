@@ -50,6 +50,15 @@ export GOOGLE_API_KEY=your-api-key-here
 GOOGLE_API_KEY=your-api-key-here
 ```
 
+#### ADK 用モデル名（オプション）
+
+ADK エージェントが使うモデルは環境変数 `ADK_MODEL` で指定できます。未設定時は `gemini-2.0-flash` を使用します。  
+API で `models/gemini-1.5-flash is not found` となる場合は、次を設定してください。
+
+```env
+ADK_MODEL=gemini-2.0-flash
+```
+
 ## 3. Vertex AI使用時の設定（オプション）
 
 Vertex AIを使用する場合は、以下の設定が必要です。

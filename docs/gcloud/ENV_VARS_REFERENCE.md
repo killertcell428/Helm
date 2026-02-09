@@ -220,6 +220,23 @@ LLM_MODEL=gemini-1.5-flash
 
 ---
 
+### `ADK_MODEL`
+
+**説明**: ADK エージェント（ResearchAgent / AnalysisAgent 等）が使う Gemini モデル名。**GenAI API v1beta で `gemini-1.5-flash` が NOT_FOUND になる場合は、この変数でモデルを指定してください。**
+
+**必須**: いいえ
+
+**デフォルト値**: `gemini-2.0-flash`
+
+**有効な値の例**: `gemini-2.0-flash`, `gemini-2.5-flash`, `gemini-1.5-flash-002` など（API でサポートされているモデル）
+
+**例**:
+```bash
+ADK_MODEL=gemini-2.0-flash
+```
+
+---
+
 ### `LLM_MAX_RETRIES`
 
 **説明**: LLM API呼び出しの最大リトライ回数
@@ -546,6 +563,36 @@ LOG_FORMAT=json
 ```
 
 **参考**: [ログとモニタリング](./LOGGING_AND_MONITORING.md)
+
+---
+
+### `CACHE_ANALYSIS_TTL_SECONDS`
+
+**説明**: 分析結果キャッシュの TTL（秒）。`GET /api/analysis/{id}` の応答をメモリにキャッシュする時間。
+
+**必須**: いいえ
+
+**デフォルト値**: `300`（5分）
+
+**例**:
+```bash
+CACHE_ANALYSIS_TTL_SECONDS=300
+```
+
+---
+
+### `CACHE_RESULTS_TTL_SECONDS`
+
+**説明**: 実行結果キャッシュの TTL（秒）。完了済み `GET /api/execution/{id}/results` の応答をメモリにキャッシュする時間。
+
+**必須**: いいえ
+
+**デフォルト値**: `300`（5分）
+
+**例**:
+```bash
+CACHE_RESULTS_TTL_SECONDS=300
+```
 
 ---
 

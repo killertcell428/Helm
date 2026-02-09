@@ -18,12 +18,14 @@ from starlette.types import ASGIApp
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 from typing import List, Optional, Dict, Any, Set
 import uuid
+import copy
 from datetime import datetime
 import traceback
 import time
 import asyncio
 import json
 from utils.logger import logger, set_log_context, clear_log_context
+from utils.simple_cache import analysis_cache, execution_results_cache
 from utils.error_notifier import error_notification_manager
 from utils.exceptions import (
     HelmException,
@@ -782,11 +784,15 @@ async def execute_tasks_background(execution_id: str):
 
 @app.get("/")
 async def root():
-    return {
-        "message": "Helm API",
-        "version": "0.1.0",
-        "status": "running"
-    }
+    """ヘルスチェック。Cache-Control で短時間キャッシュ可能（負荷軽減）。"""
+    return JSONResponse(
+        content={
+            "message": "Helm API",
+            "version": "0.1.0",
+            "status": "running"
+        },
+        headers={"Cache-Control": "public, max-age=5"}
+    )
 
 @app.post("/api/meetings/ingest")
 async def ingest_meeting(request: MeetingIngestRequest):
@@ -1203,8 +1209,12 @@ async def analyze(request: AnalyzeRequest):
 
 @app.get("/api/analysis/{analysis_id}")
 async def get_analysis(analysis_id: str):
-    """分析結果取得"""
+    """分析結果取得（キャッシュ: 同一 analysis_id は TTL 間キャッシュ）"""
     try:
+        cached = analysis_cache.get(analysis_id)
+        if cached is not None:
+            logger.debug(f"Get analysis cache hit: {analysis_id}")
+            return cached
         logger.info(f"Get analysis request: {analysis_id}")
         analysis = analyses_db.get(analysis_id)
         if not analysis:
@@ -1213,7 +1223,7 @@ async def get_analysis(analysis_id: str):
                 resource_type="analysis",
                 resource_id=analysis_id
             )
-        
+        analysis_cache.set(analysis_id, copy.deepcopy(analysis))
         return analysis
     except HelmException:
         raise
@@ -1768,9 +1778,8 @@ async def get_execution(execution_id: str):
 
 @app.get("/api/execution/{execution_id}/results")
 async def get_execution_results(execution_id: str):
-    """実行結果取得"""
+    """実行結果取得（完了済みは TTL 間キャッシュ）"""
     try:
-        logger.info(f"Get execution results request: {execution_id}")
         execution = executions_db.get(execution_id)
         if not execution:
             raise NotFoundError(
@@ -1778,7 +1787,12 @@ async def get_execution_results(execution_id: str):
                 resource_type="execution",
                 resource_id=execution_id
             )
-        
+        if execution.get("status") == "completed":
+            cached = execution_results_cache.get(execution_id)
+            if cached is not None:
+                logger.debug(f"Get execution results cache hit: {execution_id}")
+                return cached
+        logger.info(f"Get execution results request: {execution_id}")
         # 実行タスクから結果を生成（保存された結果を使用）
         results_list = []
         
@@ -1855,9 +1869,10 @@ async def get_execution_results(execution_id: str):
             "results": results_list,
             "download_url": download_url
         }
-        
+        # 完了済み実行結果はキャッシュ（同一 execution_id の再取得を軽量化）
+        if execution.get("status") == "completed":
+            execution_results_cache.set(execution_id, copy.deepcopy(results))
         logger.info(f"Execution results retrieved for {execution_id}: {len(results_list)} results")
-        
         return results
     except HelmException:
         raise

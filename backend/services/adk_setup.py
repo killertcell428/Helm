@@ -26,10 +26,15 @@ except ImportError as e:
 _runners: Dict[str, tuple] = {}
 
 def get_model():
-    """LLMモデルインスタンスを取得（環境変数に基づいて選択、公式API準拠）"""
+    """LLMモデルインスタンスを取得（環境変数に基づいて選択、公式API準拠）
+    
+    モデル名: ADK_MODEL で指定。未設定時は gemini-2.0-flash。
+    gemini-1.5-flash は API v1beta で NOT_FOUND になるため、2.0 系をデフォルトにしている。
+    """
     if not ADK_AVAILABLE:
         return None  # モックモード
     
+    model_name = os.getenv("ADK_MODEL", "gemini-2.0-flash")
     use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() == "true"
     
     if use_vertex:
@@ -38,16 +43,11 @@ def get_model():
         if project_id:
             from google.cloud import aiplatform
             aiplatform.init(project=project_id, location=location)
-            # Vertex AI使用時はVertexAiLlm（公式APIに準拠）
-            # 注意: VertexAiSessionServiceはAgent Engine IDが必要（Phase2でドキュメント化）
-            # 最新の推奨モデル: gemini-1.5-flash (gemini-2.0-flash-001は廃止予定)
-            return Gemini(model="gemini-1.5-flash", vertex_ai=True)
+            return Gemini(model=model_name, vertex_ai=True)
     
-    # デフォルトはGemini API（GOOGLE_API_KEYまたはGEMINI_API_KEY使用）
-    # 最新の推奨モデル: gemini-1.5-flash (gemini-2.0-flash-001は廃止予定)
     api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
     if api_key:
-        return Gemini(model="gemini-1.5-flash")
+        return Gemini(model=model_name)
     
     return None  # APIキー未設定時はモックモード
 
