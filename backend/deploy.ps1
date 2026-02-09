@@ -1,8 +1,17 @@
-# Helm Backend API Deployment Script
-# Google Cloud Runへのデプロイスクリプト
-# 既存プロジェクト helm-project-484105 を使用
+# Helm Backend API + Frontend Deployment Script
+# バックエンド: Google Cloud Run / フロント: Vercel
+# オプションで -BackendOnly を付けるとフロントデプロイをスキップします
 
-Write-Host "=== Helm Backend API Deployment ===" -ForegroundColor Green
+param(
+    [switch]$BackendOnly  # 指定時は Cloud Run のみ（Vercel はスキップ）
+)
+
+Write-Host "=== Helm Deployment (Backend + Frontend) ===" -ForegroundColor Green
+if ($BackendOnly) {
+    Write-Host "Mode: Backend only (Cloud Run)" -ForegroundColor Yellow
+} else {
+    Write-Host "Mode: Full (Cloud Run + Vercel)" -ForegroundColor Cyan
+}
 Write-Host ""
 
 # エラー時に停止
@@ -176,7 +185,7 @@ try {
     }
     
     Write-Host ""
-    Write-Host "=== Deployment Complete ===" -ForegroundColor Green
+    Write-Host "=== Backend (Cloud Run) Deployment Complete ===" -ForegroundColor Green
     Write-Host ""
     
     # サービスのURLを取得
@@ -184,7 +193,7 @@ try {
     if ($LASTEXITCODE -eq 0 -and $serviceUrl) {
         Write-Host "Service URL: $serviceUrl" -ForegroundColor Cyan
         Write-Host ""
-        Write-Host "Next steps:" -ForegroundColor Yellow
+        Write-Host "Next steps (backend):" -ForegroundColor Yellow
         Write-Host "1. Set environment variables (see MANUAL_SETUP_GUIDE.md)" -ForegroundColor White
         Write-Host "2. Test the API: $serviceUrl/docs" -ForegroundColor White
         Write-Host "3. Check logs: gcloud run services logs read $SERVICE_NAME --region $REGION" -ForegroundColor White
@@ -202,6 +211,45 @@ try {
     Write-Host "2. Check if required APIs are enabled" -ForegroundColor White
     Write-Host "3. Check logs: gcloud run services logs read $SERVICE_NAME --region $REGION --limit 50" -ForegroundColor White
     exit 1
+}
+
+# --- フロントエンド (Vercel) デプロイ（オプション） ---
+if (-not $BackendOnly) {
+    Write-Host ""
+    Write-Host "[7/7] Deploying frontend to Vercel..." -ForegroundColor Green
+    $frontendPath = Join-Path (Split-Path $scriptPath -Parent) "app\v0-helm-demo"
+    if (-not (Test-Path $frontendPath)) {
+        Write-Host "Warning: Frontend path not found: $frontendPath" -ForegroundColor Yellow
+        Write-Host "Skipping Vercel deploy. Run 'vercel --prod' from Dev/app/v0-helm-demo manually if needed." -ForegroundColor Yellow
+    } else {
+        $vercelCmd = Get-Command vercel -ErrorAction SilentlyContinue
+        if (-not $vercelCmd) {
+            Write-Host "Warning: Vercel CLI not found (npm i -g vercel or pnpm add -g vercel)." -ForegroundColor Yellow
+            Write-Host "Skipping frontend deploy. Push to main for auto-deploy or run 'vercel --prod' from Dev/app/v0-helm-demo." -ForegroundColor Yellow
+        } else {
+            try {
+                Push-Location $frontendPath
+                Write-Host "Working directory: $(Get-Location)" -ForegroundColor Gray
+                Write-Host "Executing: vercel --prod" -ForegroundColor Gray
+                vercel --prod
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "Error: Vercel deploy failed (exit code: $LASTEXITCODE)" -ForegroundColor Red
+                    Write-Host "Ensure you are logged in: vercel login" -ForegroundColor Yellow
+                    Pop-Location
+                    exit 1
+                }
+                Write-Host "OK: Frontend deployed to Vercel (production)" -ForegroundColor Green
+                Pop-Location
+            } catch {
+                Write-Host "Error: Vercel deploy failed" -ForegroundColor Red
+                Write-Host $_.Exception.Message -ForegroundColor Red
+                try { Pop-Location } catch { }
+                exit 1
+            }
+        }
+    }
+    Write-Host ""
+    Write-Host "=== Full Deployment Complete (Backend + Frontend) ===" -ForegroundColor Green
 }
 
 Write-Host ""

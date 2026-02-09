@@ -65,6 +65,19 @@ cd Dev/backend
 - スクリプトが Docker ビルド → Cloud Run デプロイまで実行します。
 - 初回や環境未設定の場合は [Cloud Run クイックスタート](../gcloud/QUICKSTART.md) や [デプロイ前チェックリスト](../gcloud/DEPLOY_CHECKLIST.md) を確認してください。
 
+### 一括デプロイ（バックエンド + フロントエンド）
+
+**どこを編集しても一発で両方反映したい場合**は、同じ `deploy.ps1` でフロント（Vercel）まで実行できます。
+
+```powershell
+cd Dev/backend
+.\deploy.ps1
+```
+
+- デフォルトで **Cloud Run のあと Vercel (`vercel --prod`) も実行**します。
+- バックエンドだけデプロイしたいとき: `.\deploy.ps1 -BackendOnly`
+- Vercel CLI が未インストールの場合はフロントだけスキップし、バックエンドの結果はそのまま成功になります。フロントは push で自動デプロイするか、`Dev/app/v0-helm-demo` で `vercel --prod` を手動実行してください。
+
 ---
 
 ## 4. 原稿の内容をアプリに反映する流れ（例）
