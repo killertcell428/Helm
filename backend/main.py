@@ -81,6 +81,7 @@ except ImportError as e:
     AuditLogService = None
     AuditAction = None
 from services.output_service import OutputService
+from services.evaluation_metrics import EvaluationMetrics
 
 app = FastAPI(
     title=config.API_TITLE,
@@ -371,6 +372,14 @@ class ApproveRequest(BaseModel):
 class ExecuteRequest(BaseModel):
     approval_id: str
 
+
+class FalsePositiveFeedbackRequest(BaseModel):
+    """誤検知フィードバック用リクエスト"""
+    analysis_id: str
+    pattern_id: str
+    reason: str
+    mitigation: Optional[str] = None
+
 # ==================== サービス初期化 ====================
 
 meet_service = GoogleMeetService(
@@ -433,6 +442,7 @@ llm_service = LLMService()  # LLM統合サービス
 multi_view_analyzer = MultiRoleLLMAnalyzer(llm_service=llm_service)  # マルチ視点LLM分析
 ensemble_scoring_service = EnsembleScoringService()  # アンサンブルスコアリング
 output_service = OutputService(output_dir=os.getenv("OUTPUT_DIR", "outputs"))  # 出力サービス
+evaluation_metrics = EvaluationMetrics(data_dir=os.getenv("EVALUATION_DATA_DIR", "data/evaluation"))
 
 # ==================== インメモリストレージ（開発用） ====================
 
