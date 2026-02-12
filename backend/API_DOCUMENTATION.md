@@ -7,7 +7,8 @@
 
 ## 認証
 
-現在は認証不要です。将来はGoogle OAuth2を使用予定。
+- **オフ（デフォルト）**: 環境変数 `API_KEYS` が未設定または空のときは認証不要。従来どおり全エンドポイントにアクセス可能。
+- **オン**: `API_KEYS` に JSON 配列（例: `[{"key":"helm-owner-dev-key","role":"owner"}]`）を設定すると、`/`・`/docs`・`/redoc`・`/openapi.json` 以外では **`X-API-Key` ヘッダ必須**。キーなし → 401、不正なキー → 403。詳細は [認証設計](../docs/auth-api-key-roles.md) を参照。
 
 ## インタラクティブAPIドキュメント
 
@@ -708,6 +709,118 @@ Google DriveファイルのダウンロードURLを取得します。
 
 ---
 
+### 16. 誤検知フィードバック
+
+**POST /api/feedback/false-positive**
+
+精度改善のため、誤検知として登録します。
+
+**リクエストボディ:**
+```json
+{
+  "analysis_id": "analysis_001",
+  "pattern_id": "B1_正当化フェーズ",
+  "reason": "KPI下方修正は計画内の見直しであり構造的問題ではない",
+  "mitigation": null
+}
+```
+
+**レスポンス:**
+```json
+{
+  "false_positive_id": "1",
+  "analysis_id": "analysis_001",
+  "pattern_id": "B1_正当化フェーズ",
+  "status": "registered"
+}
+```
+
+---
+
+### 17. 精度指標取得
+
+**GET /api/metrics/accuracy**
+
+Precision / Recall / F1 / 誤検知率を取得します。`pattern_id` でパターン別に絞り込み可能です。
+
+**クエリパラメータ:**
+- `pattern_id`（オプション）: パターンID（指定時はそのパターンのみ集計）
+
+**レスポンス:**
+```json
+{
+  "precision": 0.85,
+  "recall": 0.9,
+  "f1_score": 0.87,
+  "false_positive_rate": 0.15,
+  "true_positives": 9,
+  "false_positives": 2,
+  "false_negatives": 1,
+  "total_labels": 12,
+  "pattern_id": "B1_正当化フェーズ"
+}
+```
+
+---
+
+### 18. 監査ログ取得
+
+**GET /api/audit/logs**
+
+監査ログを取得します。クエリパラメータでフィルタ可能です。
+
+**クエリパラメータ:**
+- `user_id`, `role`, `action`, `resource_type`, `resource_id`（オプション）
+- `start_time`, `end_time`（オプション・ISO8601形式）
+- `limit`（オプション・デフォルト 100、最大 500）
+
+**レスポンス:**
+```json
+{
+  "logs": [
+    {
+      "log_id": "...",
+      "timestamp": "2025-02-12T10:00:00",
+      "user_id": "user1",
+      "role": "owner",
+      "action": "view_analysis",
+      "resource_type": "analysis",
+      "resource_id": "analysis_001",
+      "details": {}
+    }
+  ],
+  "count": 1
+}
+```
+
+---
+
+### 19. データ保存期間に基づく削除（管理用）
+
+**POST /api/admin/retention/cleanup**
+
+設定された保持日数を超えたデータを各ストアから削除します。日次バッチ等から呼び出す想定です。
+
+**レスポンス:**
+```json
+{
+  "status": "ok",
+  "deleted": {
+    "executions_db": 0,
+    "approvals_db": 0,
+    "escalations_db": 0,
+    "analyses_db": 0,
+    "meetings_db": 0,
+    "chats_db": 0,
+    "materials_db": 0
+  }
+}
+```
+
+設計は [data-retention.md](../docs/data-retention.md) を参照。
+
+---
+
 ## エラーレスポンス
 
 すべてのエンドポイントで、エラーが発生した場合は以下の形式で返されます：
@@ -733,6 +846,8 @@ Google DriveファイルのダウンロードURLを取得します。
 **HTTPステータスコード:**
 - `200`: 成功
 - `400`: バリデーションエラー（`VALIDATION_ERROR`）
+- `401`: 認証が必要（API Key 有効時でキー未送信）
+- `403`: 認可エラー（API Key 無効・不正）
 - `404`: リソースが見つからない（`NOT_FOUND`）
 - `422`: リクエストボディのバリデーションエラー（`VALIDATION_ERROR`）
 - `500`: 内部サーバーエラー（`INTERNAL_SERVER_ERROR`）

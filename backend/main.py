@@ -7,7 +7,11 @@ Google Meet → 議事録・チャット取得 → 重要性・緊急性評価 �
 
 from dotenv import load_dotenv
 import os
-load_dotenv()  # .envファイルを読み込む
+try:
+    load_dotenv()
+except (UnicodeDecodeError, Exception):
+    # .env の文字コードエラーなどで読めない場合はスキップ（環境変数はそのまま利用可能）
+    pass
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -82,6 +86,10 @@ except ImportError as e:
     AuditAction = None
 from services.output_service import OutputService
 from services.evaluation_metrics import EvaluationMetrics
+from services.retention_cleanup import run_retention_cleanup
+from services.definition_loader import DefinitionLoader
+from services.responsibility_resolver import ResponsibilityResolver
+from services.approval_flow_engine import ApprovalFlowEngine
 
 app = FastAPI(
     title=config.API_TITLE,
@@ -194,6 +202,53 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
 # リクエストロギングミドルウェアの追加
 app.add_middleware(RequestLoggingMiddleware)
+
+
+# ==================== API Key 認証ミドルウェア ====================
+
+class APIKeyAuthMiddleware(BaseHTTPMiddleware):
+    """API Key 検証。config.API_KEYS が空の場合はスキップ。"""
+    
+    SKIP_PATHS = {"/", "/docs", "/redoc", "/openapi.json"}
+    
+    async def dispatch(self, request: Request, call_next):
+        api_keys = getattr(config, "API_KEYS", None) or []
+        if not api_keys:
+            request.state.role = request.headers.get("X-User-Role", "system")
+            request.state.user_id = request.headers.get("X-User-ID", "system")
+            return await call_next(request)
+        if request.url.path in self.SKIP_PATHS:
+            return await call_next(request)
+        key = request.headers.get("X-API-Key") or request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+        if not key:
+            return JSONResponse(
+                status_code=401,
+                content={"error_code": "UNAUTHORIZED", "message": "X-API-Key が必要です。"}
+            )
+        matched = None
+        for entry in api_keys:
+            if isinstance(entry, dict) and entry.get("key") == key:
+                matched = entry
+                break
+        if not matched:
+            return JSONResponse(
+                status_code=403,
+                content={"error_code": "FORBIDDEN", "message": "無効な API Key です。"}
+            )
+        request.state.role = matched.get("role", "operator")
+        request.state.user_id = matched.get("user_id") or matched.get("key", key)[:8] + "..."
+        return await call_next(request)
+
+
+app.add_middleware(APIKeyAuthMiddleware)
+
+
+def _audit_identity(request: Request) -> tuple:
+    """監査ログ用の user_id, role を取得（API Key またはヘッダから）。"""
+    user_id = getattr(request.state, "user_id", None) or request.headers.get("X-User-ID", "system")
+    role = getattr(request.state, "role", None) or request.headers.get("X-User-Role", "system")
+    return user_id, role
+
 
 # ==================== グローバルエラーハンドラー ====================
 
@@ -366,8 +421,9 @@ class EscalateRequest(BaseModel):
 
 class ApproveRequest(BaseModel):
     escalation_id: str
-    decision: str  # "approve" or "modify"
+    decision: str  # "approve", "modify", or "reject"
     modifications: Optional[Dict[str, Any]] = None
+    approver_role_id: Optional[str] = None  # 多段階承認時のロール（未指定時は X-User-Role を使用）
 
 class ExecuteRequest(BaseModel):
     approval_id: str
@@ -395,20 +451,32 @@ analyzer = StructureAnalyzer(
     vertex_ai_service=vertex_ai_service,
     scoring_service=scoring_service,
 )  # ルールベース分析 + スコアリング
+# 定義ドキュメント（RACI/承認フロー）用 Loader、Resolver、承認フローエンジン
+definition_loader = DefinitionLoader()
+responsibility_resolver = ResponsibilityResolver(loader=definition_loader)
+approval_flow_engine = ApprovalFlowEngine(definition_loader=definition_loader)
+
 # エスカレーション判断エンジン（拡張機能を優先、エラー時は既存機能にフォールバック）
 try:
     if ENHANCED_ESCALATION_AVAILABLE and EnhancedEscalationEngine:
         escalation_engine = EnhancedEscalationEngine(
             escalation_threshold=config.ESCALATION_THRESHOLD,
-            use_enhanced_features=True
+            use_enhanced_features=True,
+            responsibility_resolver=responsibility_resolver,
         )
         logger.info("Using EnhancedEscalationEngine with advanced features")
     else:
-        escalation_engine = EscalationEngine(escalation_threshold=config.ESCALATION_THRESHOLD)
+        escalation_engine = EscalationEngine(
+            escalation_threshold=config.ESCALATION_THRESHOLD,
+            responsibility_resolver=responsibility_resolver,
+        )
         logger.info("Using legacy EscalationEngine")
 except Exception as e:
     logger.error(f"Failed to initialize escalation engine: {e}, using legacy engine", exc_info=True)
-    escalation_engine = EscalationEngine(escalation_threshold=config.ESCALATION_THRESHOLD)
+    escalation_engine = EscalationEngine(
+        escalation_threshold=config.ESCALATION_THRESHOLD,
+        responsibility_resolver=responsibility_resolver,
+    )
 
 # データマスキングサービス（エラーハンドリング付きで初期化）
 data_masking_service = None
@@ -500,6 +568,44 @@ async def broadcast_to_websockets(execution_id: str, message: Dict[str, Any]):
     # 切断された接続を削除
     for websocket in disconnected:
         await remove_websocket_connection(execution_id, websocket)
+
+def _apply_suppression(analysis: Dict[str, Any]) -> Dict[str, Any]:
+    """サプレッションルールに基づき findings を除外した分析結果のコピーを返す。除外後 findings が空の場合は空リストになる。"""
+    rules = getattr(config, "SUPPRESSION_RULES", None) or []
+    if not rules:
+        return analysis
+    findings = analysis.get("findings") or []
+    if not findings:
+        return analysis
+    meeting_id = analysis.get("meeting_id")
+    chat_id = analysis.get("chat_id")
+    analysis_id = analysis.get("analysis_id")
+    filtered = []
+    for f in findings:
+        pid = f.get("pattern_id")
+        suppressed = False
+        for r in rules:
+            if r.get("pattern_id") != pid:
+                continue
+            # リソース指定が無い場合は全件抑制
+            if not r.get("meeting_id") and not r.get("chat_id") and not r.get("analysis_id"):
+                suppressed = True
+                break
+            if r.get("meeting_id") and r.get("meeting_id") == meeting_id:
+                suppressed = True
+                break
+            if r.get("chat_id") and r.get("chat_id") == chat_id:
+                suppressed = True
+                break
+            if r.get("analysis_id") and r.get("analysis_id") == analysis_id:
+                suppressed = True
+                break
+        if not suppressed:
+            filtered.append(f)
+    out = copy.deepcopy(analysis)
+    out["findings"] = filtered
+    return out
+
 
 def generate_document_content(analysis: Optional[Dict[str, Any]], approval: Optional[Dict[str, Any]] = None) -> str:
     """
@@ -809,6 +915,14 @@ async def ingest_meeting(request: MeetingIngestRequest):
     """Google Meet議事録の取り込み"""
     try:
         logger.info(f"Meeting ingest request: {request.meeting_id}")
+        # 取得範囲ホワイトリスト: 設定されている場合のみリスト内のIDを許可
+        whitelist = getattr(config, "INGEST_MEETING_IDS_WHITELIST", None) or []
+        if whitelist and request.meeting_id not in whitelist:
+            raise ValidationError(
+                message=f"会議ID {request.meeting_id} は取得対象外です。",
+                field="meeting_id",
+                details={"allowed_ids": whitelist}
+            )
         # 議事録を取得（モックまたは実際のAPI）
         try:
             if not request.transcript:
@@ -861,9 +975,7 @@ async def ingest_meeting(request: MeetingIngestRequest):
         # 監査ログの記録（エラーハンドリング付き）
         if audit_log_service and AuditAction:
             try:
-                # ユーザーIDとロールはリクエストから取得（デフォルト値を使用）
-                user_id = request.headers.get("X-User-ID", "system")
-                role = request.headers.get("X-User-Role", "system")
+                user_id, role = _audit_identity(request)
                 client_host = request.client.host if request.client else None
                 
                 audit_log_service.log(
@@ -899,6 +1011,14 @@ async def ingest_chat(request: ChatIngestRequest):
     """Google Chatログの取り込み"""
     try:
         logger.info(f"Chat ingest request: {request.chat_id}")
+        # 取得範囲ホワイトリスト: 設定されている場合のみリスト内のIDを許可
+        whitelist = getattr(config, "INGEST_CHAT_IDS_WHITELIST", None) or []
+        if whitelist and request.chat_id not in whitelist:
+            raise ValidationError(
+                message=f"チャットID {request.chat_id} は取得対象外です。",
+                field="chat_id",
+                details={"allowed_ids": whitelist}
+            )
         # チャットメッセージを取得（モックまたは実際のAPI）
         try:
             if not request.messages:
@@ -954,9 +1074,7 @@ async def ingest_chat(request: ChatIngestRequest):
         # 監査ログの記録（エラーハンドリング付き）
         if audit_log_service and AuditAction:
             try:
-                # ユーザーIDとロールはリクエストから取得（デフォルト値を使用）
-                user_id = request.headers.get("X-User-ID", "system")
-                role = request.headers.get("X-User-Role", "system")
+                user_id, role = _audit_identity(request)
                 client_host = request.client.host if request.client else None
                 
                 audit_log_service.log(
@@ -1193,8 +1311,7 @@ async def analyze(request: AnalyzeRequest):
         # 監査ログの記録（エラーハンドリング付き）
         if audit_log_service and AuditAction:
             try:
-                user_id = request.headers.get("X-User-ID", "system")
-                role = request.headers.get("X-User-Role", "system")
+                user_id, role = _audit_identity(request)
                 client_host = request.client.host if request.client else None
                 
                 audit_log_service.log(
@@ -1233,8 +1350,10 @@ async def get_analysis(analysis_id: str):
                 resource_type="analysis",
                 resource_id=analysis_id
             )
-        analysis_cache.set(analysis_id, copy.deepcopy(analysis))
-        return analysis
+        # 表示時はサプレッションを適用した結果を返す
+        analysis_to_return = _apply_suppression(analysis)
+        analysis_cache.set(analysis_id, copy.deepcopy(analysis_to_return))
+        return analysis_to_return
     except HelmException:
         raise
     except Exception as e:
@@ -1253,17 +1372,24 @@ async def escalate(request: EscalateRequest):
                 resource_type="analysis",
                 resource_id=request.analysis_id
             )
+        # サプレッション適用: 除外後 findings が空ならエスカレーションしない
+        analysis_for_engine = _apply_suppression(analysis)
+        if not (analysis_for_engine.get("findings")):
+            raise ValidationError(
+                message="サプレッションにより対象となる検知がありません。エスカレーションしません。",
+                details={"analysis_id": request.analysis_id}
+            )
         
         # エスカレーション判断エンジンを使用（拡張機能を統合、エラーハンドリング付き）
         escalation_info = None
         try:
             # 拡張エスカレーションエンジンを使用（会議データとチャットデータを渡す）
-            meeting = meetings_db.get(analysis.get("meeting_id"))
-            chat = chats_db.get(analysis.get("chat_id")) if analysis.get("chat_id") else None
+            meeting = meetings_db.get(analysis_for_engine.get("meeting_id"))
+            chat = chats_db.get(analysis_for_engine.get("chat_id")) if analysis_for_engine.get("chat_id") else None
             
             escalation_info = escalation_engine.create_escalation(
                 request.analysis_id,
-                analysis,
+                analysis_for_engine,
                 meeting,
                 chat
             )
@@ -1275,7 +1401,7 @@ async def escalate(request: EscalateRequest):
                     escalation_info = escalation_engine.legacy_engine.create_escalation(request.analysis_id, analysis)
                 elif hasattr(escalation_engine, 'create_escalation'):
                     # 拡張エンジンの基本メソッドを試行
-                    escalation_info = escalation_engine.create_escalation(request.analysis_id, analysis)
+                    escalation_info = escalation_engine.create_escalation(request.analysis_id, analysis_for_engine)
             except Exception as e2:
                 logger.error(f"Failed to create escalation with fallback: {e2}", exc_info=True)
                 raise ServiceError(
@@ -1338,6 +1464,19 @@ async def escalate(request: EscalateRequest):
             escalation_data["question"] = escalation_info["question"]
         if "type" in escalation_info:
             escalation_data["type"] = escalation_info["type"]
+        if "approval_flow_id" in escalation_info:
+            escalation_data["approval_flow_id"] = escalation_info["approval_flow_id"]
+            # 多段階承認の初期ステージを設定
+            flow_id = escalation_info["approval_flow_id"]
+            flows = definition_loader.get_approval_flows()
+            if flows:
+                for t in (flows.get("templates") or []):
+                    if t.get("flow_id") == flow_id:
+                        stages = t.get("stages") or []
+                        draft = next((s for s in stages if s.get("stage_id") == "draft"), None)
+                        escalation_data["current_stage_id"] = draft.get("next", "approved") if draft else "approved"
+                        escalation_data["stage_approvals"] = {}
+                        break
         
         escalations_db[escalation_id] = escalation_data
         
@@ -1347,8 +1486,7 @@ async def escalate(request: EscalateRequest):
         # 監査ログの記録（エラーハンドリング付き）
         if audit_log_service and AuditAction:
             try:
-                user_id = request.headers.get("X-User-ID", "system")
-                role = request.headers.get("X-User-Role", "system")
+                user_id, role = _audit_identity(request)
                 client_host = request.client.host if request.client else None
                 
                 audit_log_service.log(
@@ -1372,42 +1510,60 @@ async def escalate(request: EscalateRequest):
         raise
 
 @app.post("/api/approve")
-async def approve(request: ApproveRequest):
-    """Executive承認"""
+async def approve(approve_req: ApproveRequest, request: Request):
+    """Executive承認（テンプレートありの場合は多段階承認フロー、無ければ1回で完了）"""
     try:
-        logger.info(f"Approval request: escalation_id={request.escalation_id}, decision={request.decision}")
-        escalation = escalations_db.get(request.escalation_id)
+        logger.info(f"Approval request: escalation_id={approve_req.escalation_id}, decision={approve_req.decision}")
+        escalation = escalations_db.get(approve_req.escalation_id)
         if not escalation:
             raise NotFoundError(
-                message=f"エスカレーションが見つかりません: {request.escalation_id}",
+                message=f"エスカレーションが見つかりません: {approve_req.escalation_id}",
                 resource_type="escalation",
-                resource_id=request.escalation_id
+                resource_id=approve_req.escalation_id
             )
-        
-        # バリデーション
-        if request.decision not in ["approve", "modify"]:
+        if approve_req.decision not in ["approve", "modify", "reject"]:
             raise ValidationError(
-                message=f"無効な決定です: {request.decision}",
+                message=f"無効な決定です: {approve_req.decision}",
                 field="decision",
-                details={"valid_values": ["approve", "modify"]}
+                details={"valid_values": ["approve", "modify", "reject"]}
             )
-        
+        approver_role_id = approve_req.approver_role_id or _audit_identity(request)[1]
+        flow_id = escalation.get("approval_flow_id")
+        if flow_id and approval_flow_engine:
+            # 多段階承認フロー: フローエンジンで記録しステージ遷移
+            decision_for_engine = "reject" if approve_req.decision == "reject" else "approve"
+            updated = approval_flow_engine.record_approval(escalation, approver_role_id, decision_for_engine)
+            escalations_db[approve_req.escalation_id] = updated
+            if updated.get("status") == "rejected":
+                return {"escalation_id": approve_req.escalation_id, "decision": "reject", "status": "rejected"}
+            if updated.get("status") == "approved":
+                approval_id = str(uuid.uuid4())
+                approval_data = {
+                    "approval_id": approval_id,
+                    "escalation_id": approve_req.escalation_id,
+                    "decision": approve_req.decision,
+                    "modifications": approve_req.modifications,
+                    "created_at": datetime.now().isoformat(),
+                    "status": "approved"
+                }
+                approvals_db[approval_id] = approval_data
+                logger.info(f"Approval {approval_id} created (flow complete): decision={approve_req.decision}")
+                return approval_data
+            return {"escalation_id": approve_req.escalation_id, "current_stage_id": updated.get("current_stage_id"), "status": "pending"}
+        # テンプレートなし: 従来どおり1回で承認完了
         approval_id = str(uuid.uuid4())
-        
         approval_data = {
             "approval_id": approval_id,
-            "escalation_id": request.escalation_id,
-            "decision": request.decision,
-            "modifications": request.modifications,
+            "escalation_id": approve_req.escalation_id,
+            "decision": approve_req.decision,
+            "modifications": approve_req.modifications,
             "created_at": datetime.now().isoformat(),
             "status": "approved"
         }
-        
         approvals_db[approval_id] = approval_data
         escalation["status"] = "approved"
-        
-        logger.info(f"Approval {approval_id} created: decision={request.decision}")
-        
+        escalations_db[approve_req.escalation_id] = escalation
+        logger.info(f"Approval {approval_id} created: decision={approve_req.decision}")
         return approval_data
     except HelmException:
         raise
@@ -1417,7 +1573,7 @@ async def approve(request: ApproveRequest):
 
 @app.post("/api/execute")
 async def execute(request: ExecuteRequest):
-    """AI自律実行開始"""
+    """AI自律実行開始（冪等: 同一 approval_id の再リクエストは既存実行を返す）"""
     try:
         logger.info(f"Execution request: approval_id={request.approval_id}")
         approval = approvals_db.get(request.approval_id)
@@ -1427,7 +1583,12 @@ async def execute(request: ExecuteRequest):
                 resource_type="approval",
                 resource_id=request.approval_id
             )
-        
+        # 冪等性: 同一 approval_id で既に execution があればそれを返す
+        for eid, ex in executions_db.items():
+            if isinstance(ex, dict) and ex.get("approval_id") == request.approval_id:
+                out = copy.deepcopy(ex)
+                out["idempotent_replay"] = True
+                return out
         execution_id = str(uuid.uuid4())
         
         # 分析結果と承認データを取得
@@ -1584,6 +1745,131 @@ async def execute(request: ExecuteRequest):
     except Exception as e:
         logger.error(f"Unexpected error in execute: {e}", exc_info=True)
         raise
+
+
+@app.post("/api/feedback/false-positive")
+async def feedback_false_positive(request: FalsePositiveFeedbackRequest):
+    """誤検知フィードバックを登録（精度改善用）"""
+    try:
+        fp_id = evaluation_metrics.add_false_positive(
+            analysis_id=request.analysis_id,
+            pattern_id=request.pattern_id,
+            reason=request.reason,
+            mitigation=request.mitigation
+        )
+        return {
+            "false_positive_id": fp_id,
+            "analysis_id": request.analysis_id,
+            "pattern_id": request.pattern_id,
+            "status": "registered"
+        }
+    except HelmException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in feedback_false_positive: {e}", exc_info=True)
+        raise
+
+
+@app.get("/api/metrics/accuracy")
+async def get_metrics_accuracy(pattern_id: Optional[str] = None):
+    """精度指標を取得（Precision, Recall, F1, 誤検知率）。pattern_id でパターン別に絞り可能。"""
+    try:
+        metrics = evaluation_metrics.calculate_metrics(pattern_id=pattern_id)
+        return metrics
+    except HelmException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in get_metrics_accuracy: {e}", exc_info=True)
+        raise
+
+
+@app.post("/api/admin/retention/cleanup")
+async def admin_retention_cleanup():
+    """保存期間を超えたデータを削除（日次バッチ用）。"""
+    try:
+        retention_days = {
+            "meetings": getattr(config, "RETENTION_DAYS_MEETINGS", 90),
+            "chats": getattr(config, "RETENTION_DAYS_CHATS", 90),
+            "materials": getattr(config, "RETENTION_DAYS_MATERIALS", 90),
+            "analyses": getattr(config, "RETENTION_DAYS_ANALYSES", 180),
+            "escalations": getattr(config, "RETENTION_DAYS_ESCALATIONS", 365),
+            "approvals": getattr(config, "RETENTION_DAYS_APPROVALS", 365),
+            "executions": getattr(config, "RETENTION_DAYS_EXECUTIONS", 365),
+        }
+        deleted = run_retention_cleanup(
+            meetings_db,
+            chats_db,
+            materials_db,
+            analyses_db,
+            escalations_db,
+            approvals_db,
+            executions_db,
+            retention_days,
+        )
+        return {"status": "ok", "deleted": deleted}
+    except Exception as e:
+        logger.error(f"Retention cleanup failed: {e}", exc_info=True)
+        raise
+
+
+@app.get("/api/audit/logs")
+async def get_audit_logs(
+    user_id: Optional[str] = None,
+    role: Optional[str] = None,
+    action: Optional[str] = None,
+    resource_type: Optional[str] = None,
+    resource_id: Optional[str] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    limit: int = 100
+):
+    """監査ログを取得。クエリパラメータでフィルタ可能。"""
+    try:
+        if not audit_log_service:
+            raise ServiceError(
+                message="監査ログサービスが利用できません。",
+                service_name="AuditLogService",
+                details={}
+            )
+        action_enum = None
+        if action and AuditAction:
+            try:
+                action_enum = AuditAction(action)
+            except ValueError:
+                raise ValidationError(
+                    message=f"無効な action です: {action}",
+                    field="action",
+                    details={"valid_values": [e.value for e in AuditAction]}
+                )
+        start_dt = None
+        if start_time:
+            try:
+                start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+            except ValueError:
+                raise ValidationError(message="start_time は ISO8601 形式で指定してください。", field="start_time")
+        end_dt = None
+        if end_time:
+            try:
+                end_dt = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+            except ValueError:
+                raise ValidationError(message="end_time は ISO8601 形式で指定してください。", field="end_time")
+        logs = audit_log_service.get_logs(
+            user_id=user_id,
+            role=role,
+            action=action_enum,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            start_time=start_dt,
+            end_time=end_dt,
+            limit=min(limit, 500)
+        )
+        return {"logs": logs, "count": len(logs)}
+    except HelmException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in get_audit_logs: {e}", exc_info=True)
+        raise
+
 
 @app.websocket("/api/execution/{execution_id}/ws")
 async def websocket_endpoint(websocket: WebSocket, execution_id: str):

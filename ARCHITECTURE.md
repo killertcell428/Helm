@@ -263,6 +263,10 @@ app/v0-helm-demo/
 backend/
 ├── main.py                 # メインAPI
 ├── config.py               # アプリケーション設定
+├── config/definitions/     # 組織グラフ・RACI・承認フロー（JSON）
+│   ├── org_graph.json
+│   ├── raci.json
+│   └── approval_flows.json
 ├── services/               # サービス層
 │   ├── google_meet.py      # Google Meet統合
 │   ├── google_chat.py      # Google Chat統合
@@ -272,6 +276,12 @@ backend/
 │   ├── llm_service.py      # LLM統合サービス（Gemini / Gen AI SDK）
 │   ├── scoring.py          # スコアリングサービス
 │   ├── escalation_engine.py # エスカレーション判断エンジン
+│   ├── definition_loader.py # 定義ドキュメント読み込み（org_graph, raci, approval_flows）
+│   ├── responsibility_resolver.py # RACI/承認フロー解決（target_roles, approval_flow_id）
+│   ├── approval_flow_engine.py # 多段階承認フロー（ステージ遷移・全員承認判定）
+│   ├── audit_log.py # 監査ログ
+│   ├── evaluation_metrics.py # 精度指標・誤検知フィードバック
+│   ├── retention_cleanup.py # データ保存期間に基づく削除
 │   ├── google_workspace.py # Google Workspace統合
 │   ├── google_drive.py     # Google Drive統合
 │   ├── output_service.py   # 出力サービス
@@ -382,6 +392,10 @@ backend/
 | GET | `/api/download/{file_id}` | ファイルダウンロードURL取得 |
 | GET | `/api/outputs` | 出力ファイル一覧取得 |
 | GET | `/api/outputs/{file_id}` | 出力ファイル取得 |
+| POST | `/api/feedback/false-positive` | 誤検知フィードバック登録 |
+| GET | `/api/metrics/accuracy` | 精度指標取得（Precision/Recall/F1、pattern_id で絞り込み可） |
+| GET | `/api/audit/logs` | 監査ログ取得（user_id, action, 期間等でフィルタ） |
+| POST | `/api/admin/retention/cleanup` | データ保存期間に基づく削除（日次バッチ用） |
 
 ### データモデル
 
@@ -565,18 +579,28 @@ Helmは、ルールベース分析とマルチ視点LLM分析を組み合わせ�
          └──▶ Google APIs (各種サービス)
 ```
 
+## 定義ドキュメント（組織グラフ・RACI・承認フロー）
+
+組織グラフ・RACI・承認フローを JSON で管理し、EscalationEngine と approve に組み込んでいます。
+
+- **配置**: `backend/config/definitions/`（org_graph.json, raci.json, approval_flows.json）。のちに Firestore 優先読み込みに対応可能。
+- **DefinitionLoader**: 3 種の定義をファイル（または Firestore）から読み返す。
+- **ResponsibilityResolver**: 分析結果の pattern_id から RACI の R（責任者）と承認フローの flow_id を解決。EscalationEngine に注入し、create_escalation の返却に target_roles / approval_flow_id を含める。
+- **ApprovalFlowEngine**: テンプレートに基づく多段階承認（ステージ遷移・全員承認判定）。approve API は approval_flow_id がある場合にフローエンジンで処理し、完了時のみ approval レコードを作成。
+- **定義がない場合**: 従来どおり「常に Executive」「1 回の approve で完了」にフォールバック。
+
 ## セキュリティ
 
 ### 認証・認可
 
 **現在の実装:**
-- 認証不要（開発環境）
-- CORS設定により、指定されたオリジンのみアクセス可能
+- **API Key 認証（オプション）**: 環境変数 `API_KEYS` に JSON 配列（例: `[{"key":"xxx","role":"owner"}]`）を設定すると、`/`・`/docs` 以外のパスで `X-API-Key` ヘッダ必須。無いと 401、不正キーで 403。キーに紐づくロールは監査ログ・承認フローで利用。詳細は [認証設計](./docs/auth-api-key-roles.md)。
+- `API_KEYS` が空のときは認証不要（従来どおり）。
+- CORS 設定により、指定されたオリジンのみアクセス可能。
 
 **将来実装予定:**
-- Google OAuth2認証
-- サービスアカウント認証
-- ロールベースアクセス制御
+- Google OAuth2 認証
+- ルート別の必要ロール（例: `/api/admin/*` は admin のみ）
 
 ### データ保護
 
@@ -677,14 +701,24 @@ Helmは、ルールベース分析とマルチ視点LLM分析を組み合わせ�
   - `/api/download/{file_id}` - ファイルダウンロード
   - `/api/outputs` - 出力ファイル一覧
   - `/api/outputs/{file_id}` - 出力ファイル取得
+  - `/api/feedback/false-positive` - 誤検知フィードバック
+  - `/api/metrics/accuracy` - 精度指標取得
+  - `/api/audit/logs` - 監査ログ取得
+  - `/api/admin/retention/cleanup` - データ保存期間に基づく削除
+- ✅ **認証（API Key ＋ ロール）**: `API_KEYS` で有効化、`X-API-Key` 検証。オーナーキー例は backend README 参照。
+- ✅ **取得範囲ホワイトリスト・サプレッション**: 会議/チャットIDのホワイトリスト、検知のサプレッション条件（config）。
+- ✅ **データ保存期間**: 保持日数設定と定期削除 API。設計は [data-retention.md](./docs/data-retention.md)。
+- ✅ **冪等性（execute）**: 同一 approval_id の再リクエストは既存実行を返す。設計は [idempotency-execute.md](./docs/idempotency-execute.md)。
+- ✅ **定義ドキュメント駆動**: 組織グラフ・RACI・承認フローを JSON で管理。DefinitionLoader、ResponsibilityResolver、ApprovalFlowEngine。多段階承認（テンプレートに基づくステージ遷移）をサポート。
+- ✅ **将来実装の設計ドキュメント**: [docs/future/](./docs/future/) に ownership-model, multi-tenancy, job-queue, notification-policy を設計のみで記載。
 
 ### 将来実装予定
 
-- ⏳ Firestore統合（データの永続化）
-- ⏳ 認証・認可機能
+- ⏳ Firestore 統合（データの永続化、定義の Firestore 優先読み込み）
+- ⏳ ルート別の必要ロール（admin 専用 API 等）
 - ⏳ レート制限
 - ⏳ メトリクス収集
-- ⏳ バックグラウンドタスクキュー（Celery等）
+- ⏳ バックグラウンドタスクキュー（Celery / Cloud Tasks 等）
 
 ## 参考資料
 

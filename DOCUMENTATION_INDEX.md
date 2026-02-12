@@ -10,15 +10,22 @@ Helmプロジェクトの主要ドキュメント一覧です。
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - システム全体の設計
 
 ### 進捗・実装状況
-- [docs/status/DEVELOPMENT_STATUS_SUMMARY.md](./docs/status/DEVELOPMENT_STATUS_SUMMARY.md) - 開発状況サマリー（提出完了断面）⭐ **最新**
+- [docs/status/DEVELOPMENT_STATUS_SUMMARY.md](./docs/status/DEVELOPMENT_STATUS_SUMMARY.md) - **現状の開発状況**と**ネクストステップ**の整理 ⭐ **最新**
+- [docs/status/CURRENT_DEVELOPMENT_STATUS.md](./docs/status/CURRENT_DEVELOPMENT_STATUS.md) - 開発状況の詳細
+- [docs/status/NEXT_STEPS.md](./docs/status/NEXT_STEPS.md) - 次のステップ（タスク単位・完了済み含む）
 - [docs/status/PROJECT_STATUS.md](./docs/status/PROJECT_STATUS.md) - プロジェクト状況
-- [docs/status/NEXT_STEPS.md](./docs/status/NEXT_STEPS.md) - 次のステップ（提出後タスク含む）
 - [docs/status/WEEK2_SUMMARY.md](./docs/status/WEEK2_SUMMARY.md) - Week 2の実装サマリー
 - [docs/status/CLEANUP_SUMMARY.md](./docs/status/CLEANUP_SUMMARY.md) - ファイル整理サマリー
 
 ### 実装詳細
 - [backend/REAL_DATA_IMPLEMENTATION.md](./backend/REAL_DATA_IMPLEMENTATION.md) - 実データ実装の詳細
 - [backend/API_DOCUMENTATION.md](./backend/API_DOCUMENTATION.md) - API仕様書
+
+### 設計・運用（ガバナンスまわり）
+- [docs/auth-api-key-roles.md](./docs/auth-api-key-roles.md) - 認証（API Key ＋ ロール）設計・有効化方法
+- [docs/data-retention.md](./docs/data-retention.md) - データ保存期間と自動削除の設計
+- [docs/idempotency-execute.md](./docs/idempotency-execute.md) - 冪等性（execute）の設計
+- [docs/future/](./docs/future/) - 将来実装の設計（オーナーシップ、マルチテナント、ジョブキュー、通知ポリシー）
 
 ## 🔧 セットアップガイド
 
@@ -98,8 +105,9 @@ Helmプロジェクトの主要ドキュメント一覧です。
 - 次のステップ: [docs/status/NEXT_STEPS.md](./docs/status/NEXT_STEPS.md)
 - プロジェクト状況: [docs/status/PROJECT_STATUS.md](./docs/status/PROJECT_STATUS.md)
 
-### API仕様
+### API仕様・認証
 - [backend/API_DOCUMENTATION.md](./backend/API_DOCUMENTATION.md)
+- [docs/auth-api-key-roles.md](./docs/auth-api-key-roles.md) - API Key 認証の有効化
 - Swagger UI: http://localhost:8000/docs（サーバー起動時）
 
 ### トラブルシューティング

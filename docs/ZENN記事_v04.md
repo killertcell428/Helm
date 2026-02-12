@@ -9,19 +9,23 @@
 Helmは、**人の責任・判断・意思決定**に焦点を当てたAIエージェントです。既存のAIエージェントがタスクや成果物を最適化するのに対し、Helmは「誰が・いつ・どう判断するか」が曖昧で、意思決定が遅れたり歪んだりする問題を検知し、改善します。
 
 #### サービスURL
+
 とりあえず最初にモノを見たい方へ
 @[card](https://v0-helm-pdca-demo.vercel.app/)
 
 ## 何ができるようになるの？
+
 ![BEFORE / AFTER 比較イメージ](https://storage.googleapis.com/zenn-user-upload/1841fb962b0c-20260211.png)
 *人手による監視・判断 vs Helmによる自律支援*
 
 ### とある会議のケース：Helmによる変化
+
 **従来**：経営会議ではCFOが数字を報告し、CEOは「戦略は間違っていない」と正当化。結論は「計画維持・3か月後に再報告」。一方、会議後のチャットでは「撤退案を口に出せる空気ではなかった」と本音が漏れているのに、それが会議には反映されない。→ 意思決定の遅延、過度な正当化、リソース浪費へ。
 **Helm導入後**：会議議事録とチャットログをマルチ視点評価で分析し、問題を検知。スコアに基づきエスカレーションし、経営層が介入案を承認するとAIが自律実行。3週間後の経営会議では撤退案が議題に含まれ、CFOが「投資凍結オプション」の財務影響を具体的に言及するように。→ 意思決定のスピードアップ、軌道修正、リソース節約、早期撤退や成長の判断がしやすい組織へ。
 ![](https://storage.googleapis.com/zenn-user-upload/d4a71235e53f-20260211.png)
 
 ## 背景・課題
+
 ![](https://storage.googleapis.com/zenn-user-upload/b0fc4b7914a4-20260211.png)
 
 私は、大企業でのAI戦略やAIの浸透をどのように実現するかの体制検討などを普段仕事にしていますが、
@@ -29,18 +33,19 @@ AIが社会・会社・組織に浸透していく真っ只中で、近い未来
 
 - **経験談**：いろんなAIツールでどんどん分析や示唆、資料は出てくるようになったけど、上司・経営層との会議手戻りが多く結局あまり工数改善されていない
 - **調査事例**：パーソル総合研究所「無駄な社内会議による企業損失額調査」（2018年9月）によると、部長級管理職の週平均会議時間は**8.6時間**で、経営層のレビュー負荷は**週15時間**にも及びます[^5]。
-:::details 参考：Helmが解決する課題の調査事例
-従業員1,000名以上の企業では、以下の実データが報告されています。
+  :::details 参考：Helmが解決する課題の調査事例
+  従業員1,000名以上の企業では、以下の実データが報告されています。
 
 **意思決定リードタイムの遅延**
 
 株式会社IDEATECH「大企業・エンプラの意思決定プロセス実態調査」（2025年6月）によると、新規サービス導入の意思決定期間は、平均で**約4〜5ヶ月（120〜150日）**にのぼります[^1]。戦略的意思決定と新規事業の意思決定を平均すると、**平均意思決定リードタイムは70〜85日**となります。
 
 **新規事業の高い失敗率**
+
 - 株式会社スーパーソフトウエア「新規事業に関する実態調査」（2023年6月）：**6割以上（60%以上）が失敗**[^2]
 - PwC Japan「新規事業開発の取り組みに関する実態調査2025年」（2025年11月）：投資回収まで至った企業は**約2割（20%）**のみ[^3]
 - NTTデータ「なぜ81％の新規事業がグロースに失敗するのか？」（2024年9月）：**81%の事業が成長段階で失敗**[^4]
-:::
+  :::
 
 会社の中で「誰が何を判断するか」が問われる場面において、まだAIが活用できていない理由として、単にAIツールを入れても解決できない**人の責任・判断にまつわる問題**が存在します。
 
@@ -66,6 +71,7 @@ AIが社会・会社・組織に浸透していく真っ只中で、近い未来
 Helmは、**会議やチャットから「誰が・いつ・どう判断すべきか」の問題を検知し、適切な人に判断を促すシステム**です。従来の「人がAIを呼び出す」から「AIが人を呼び出す」へ転換することで、判断の遅れや責任の曖昧さなどを自動検知し、適切なタイミングで適切な人に判断を求める仕組みを実現します。
 
 ### Helmを構成する3つの中核機能
+
 Helmでは、大きく3つの機能によって組織の意思決定を改善します。
 ![解決の方向性（AIが人を呼び出す）](https://storage.googleapis.com/zenn-user-upload/d2444342801e-20260211.png)
 
@@ -148,18 +154,9 @@ Google Meet APIから議事録を取得し、発言者抽出、KPI検出、撤�
 
 判断の遅れや責任の曖昧さなどが検知されると、Helmは自動的に適切なロール（経営層など）を決定し、エスカレーション理由を生成します。
 
-> 補足：MVP時点での割り切り
+> 補足：組織グラフ・RACI・承認フロー
 >
-> 現状のMVPでは、EscalationEngineは常に「経営層」向けのエスカレーションを選択しています。  
-> 本来は、組織グラフやRACI（Responsible / Accountable / Consulted / Informed）に基づいて「どのレイヤーまで上げるか」を細かく制御する必要があります。
->
-> Helmとしては、次のステップで以下を順に実装していきます。
->
-> - 組織グラフの管理（部署・役職・報告ライン）
-> - RACIベースの責任モデル（判断種別ごとに誰が責任を持つか）
-> - 承認フローのテンプレート化（例：投資凍結はCFO＋事業責任者のダブル承認）
->
-> まずは「問題の早期検知とエスカレーションの型」をMVPで作り、その後に責任モデルを段階的に精緻化していく設計です。
+> 組織グラフ・RACI・承認フローは **JSON定義で賄っている**。`config/definitions/` に org_graph、raci、approval_flows を置き、EscalationEngine が ResponsibilityResolver 経由で「どのロールに上げるか」「どの承認フローを使うか」を決める。承認はテンプレートに基づく多段階（例：投資凍結＝CFO承認→経営層承認）まで対応。定義が無い場合は経営層・1回承認でフォールバックする。永続化・共有は Firestore を想定した設計で、現状はファイルベース。
 
 ### ステップ4：AI自律実行
 
@@ -220,29 +217,31 @@ flowchart LR
     DOC --> OUT["OutputService Google Drive保存"]
 ```
 
-| 段階 | 主なAPI・サービス |
-|------|-------------------|
-| ① | `POST /api/meetings/ingest`, `POST /api/chat/ingest`, `POST /api/materials/ingest` |
-| ② | `POST /api/analyze`（StructureAnalyzer + MultiRoleLLMAnalyzer + EnsembleScoringService） |
-| ③ | `POST /api/escalate`, `POST /api/approve`（EscalationEngine） |
-| ④ | `POST /api/execute`（LLMタスク生成 → ADKエージェント実行）、`WebSocket /api/execution/{id}/ws`（進捗リアルタイム配信） |
+| 段階 | 主なAPI・サービス                                                                                                           |
+| ---- | --------------------------------------------------------------------------------------------------------------------------- |
+| ①   | `POST /api/meetings/ingest`, `POST /api/chat/ingest`, `POST /api/materials/ingest`                                    |
+| ②   | `POST /api/analyze`（StructureAnalyzer + MultiRoleLLMAnalyzer + EnsembleScoringService）                                  |
+| ③   | `POST /api/escalate`, `POST /api/approve`（EscalationEngine）                                                           |
+| ④   | `POST /api/execute`（LLMタスク生成 → ADKエージェント実行）、`WebSocket /api/execution/{id}/ws`（進捗リアルタイム配信） |
 
------
+---
 
 ### 各フロー詳細
 
 #### 1. データ取り込みフロー
+
 ![](https://storage.googleapis.com/zenn-user-upload/6fc2e0860be1-20260211.png)
 **API**: `POST /api/meetings/ingest`, `POST /api/chat/ingest`, `POST /api/materials/ingest`
 
-| ツール・サービス | 役割 |
-|------------------|------|
-| **GoogleMeetService** | 議事録取得（`get_transcript`）、パース（`parse_transcript`） |
+| ツール・サービス            | 役割                                                                |
+| --------------------------- | ------------------------------------------------------------------- |
+| **GoogleMeetService** | 議事録取得（`get_transcript`）、パース（`parse_transcript`）    |
 | **GoogleChatService** | チャット取得（`get_chat_messages`）、パース（`parse_messages`） |
 
 議事録パースでは発言者抽出・KPI検出・撤退議論検出、チャットパースではリスク検出・エスカレーション検出・反対意見検出を行い、構造化データとして保持します。
 
 #### 詳細
+
 ```mermaid
 flowchart TD
     A[Google Meet] --> B[GoogleMeetService.get_transcript]
@@ -264,16 +263,17 @@ flowchart TD
 ```
 
 #### 2. 判断・責任にまつわる問題の検知フロー（マルチ視点評価システム）
+
 ![](https://storage.googleapis.com/zenn-user-upload/7ff8705df965-20260211.png)
 **API**: `POST /api/analyze`
 
-| ツール・サービス | 役割 |
-|------------------|------|
-| **StructureAnalyzer** | ルールベース分析（KPI下方修正回数、撤退議論の有無、判断集中率、反対意見無視） |
-| **MultiRoleLLMAnalyzer** | 4ロール（executive / corp_planning / staff / governance）で同一データをLLM評価 |
-| **EnsembleScoringService** | 0.6×ルール + 0.4×LLM で統合、重要度・緊急度は安全側を採用 |
-| **ScoringService** | 各 finding の重要度・緊急度評価 |
-| **OutputService** | 分析結果の保存（`save_analysis_result`） |
+| ツール・サービス                 | 役割                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------ |
+| **StructureAnalyzer**      | ルールベース分析（KPI下方修正回数、撤退議論の有無、判断集中率、反対意見無視）  |
+| **MultiRoleLLMAnalyzer**   | 4ロール（executive / corp_planning / staff / governance）で同一データをLLM評価 |
+| **EnsembleScoringService** | 0.6×ルール + 0.4×LLM で統合、重要度・緊急度は安全側を採用                    |
+| **ScoringService**         | 各 finding の重要度・緊急度評価                                                |
+| **OutputService**          | 分析結果の保存（`save_analysis_result`）                                     |
 
 **検出パターン例**: B1_正当化フェーズ、ES1_報告遅延、A2_撤退判断の遅れ（LLM検出）
 
@@ -281,16 +281,16 @@ flowchart TD
 
 **API**: `POST /api/escalate`, `POST /api/approve`
 
-| ツール・サービス | 役割 |
-|------------------|------|
-| **EscalationEngine** | `should_escalate`（閾値・重要度で判断）、`determine_target_role`（ロール選択）、`generate_escalation_reason`（理由生成） |
-| 責任モデル・組織グラフ（誰がどの判断に責任を持つか／報告関係） | 将来実装（現在は常に経営層を選択） |
+| ツール・サービス                                                 | 役割                                                                                                                                                    |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **EscalationEngine**                                       | `should_escalate`（閾値・重要度で判断）、`determine_target_role`（ロール選択）、`generate_escalation_reason`（理由生成）                          |
+| 責任モデル・組織グラフ（RACI／報告関係／承認フローテンプレート） | JSON定義（org_graph / raci / approval_flows）を DefinitionLoader・ResponsibilityResolver・ApprovalFlowEngine が読み、EscalationEngine と approve で利用 |
 
 ```mermaid
 flowchart TD
     A[アラート生成] --> B["EscalationEngine should_escalate"]
-    B --> C["責任モデル参照 将来実装"]
-    B --> D["組織グラフ参照 将来実装"]
+    B --> C["RACI・承認フロー参照"]
+    B --> D["組織グラフ定義"]
     B --> E["determine_target_role ロール選択"]
     C --> F["経営層呼び出し api escalate"]
     D --> F
@@ -303,21 +303,23 @@ flowchart TD
 ```
 
 #### 4. AI自律実行フロー（ADKエージェント）
+
 ![](https://storage.googleapis.com/zenn-user-upload/ef7eb24627be-20260211.png)
 **API**: `POST /api/execute`, `WebSocket /api/execution/{id}/ws`（進捗リアルタイム配信）
 
-| ツール・サービス | 役割 |
-|------------------|------|
-| **LLMService.generate_tasks** | 承認内容からタスクリストを生成（research / analysis / notification / document 等） |
-| **TaskWorkflowAgent** | タスク依存解決と実行順制御、SharedContext でエージェント間共有 |
-| **ResearchAgent** | `search_market_data`, `analyze_market_data`（将来: Vertex AI Search） |
-| **AnalysisAgent** | `fetch_internal_data`, `perform_financial_simulation`（将来: Google Drive API） |
-| **NotificationAgent** | `generate_notification_message`, `send_notification`（Phase1: ドラフトのみ、将来: Chat/Gmail API） |
-| **GoogleWorkspaceService** | `research_market_data`, `analyze_data`, `create_document`（資料作成） |
-| **GoogleDriveService** | `save_file`, ダウンロードURL取得 |
-| **OutputService** | `save_task_generation_result`、結果JSON保存 |
+| ツール・サービス                    | 役割                                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **LLMService.generate_tasks** | 承認内容からタスクリストを生成（research / analysis / notification / document 等）                     |
+| **TaskWorkflowAgent**         | タスク依存解決と実行順制御、SharedContext でエージェント間共有                                         |
+| **ResearchAgent**             | `search_market_data`, `analyze_market_data`（将来: Vertex AI Search）                              |
+| **AnalysisAgent**             | `fetch_internal_data`, `perform_financial_simulation`（将来: Google Drive API）                    |
+| **NotificationAgent**         | `generate_notification_message`, `send_notification`（Phase1: ドラフトのみ、将来: Chat/Gmail API） |
+| **GoogleWorkspaceService**    | `research_market_data`, `analyze_data`, `create_document`（資料作成）                            |
+| **GoogleDriveService**        | `save_file`, ダウンロードURL取得                                                                     |
+| **OutputService**             | `save_task_generation_result`、結果JSON保存                                                          |
 
 #### 詳細
+
 ```mermaid
 flowchart TD
     A[承認完了] --> B[LLMService.generate_tasks<br/>タスク作成]
@@ -325,7 +327,7 @@ flowchart TD
     B --> D[analysis: AnalysisAgent]
     B --> E[document: GoogleWorkspaceService.create_document]
     B --> F[notification: NotificationAgent]
-    B --> G[会議調整・作成<br/>将来実装]
+    B --> G[会議調整・作成<br/>設計段階]
     C --> C1[search_market_data]
     C --> C2[analyze_market_data]
     D --> D1[fetch_internal_data]
@@ -348,24 +350,24 @@ flowchart TD
 
 ### 技術スタック
 
-| カテゴリ                           | 技術                          | 選定理由                                                                                            | 具体的活用方法                                                                                                                    |
-| ---------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **フロントエンド**           | Next.js 16.x                  | Reactベースのフレームワークで、SSRとSSGをサポート。デモページの高速表示を実現                       | Case1/Case2/Case3のデモページを構築。API Client（lib/api.ts）でバックエンドと通信（実装は Next.js 16.0.x）                        |
-|                                    | TypeScript                    | 型安全性の確保により、開発時のエラーを早期発見                                                      | APIレスポンスの型定義、コンポーネントの型安全性を確保                                                                             |
-|                                    | Tailwind CSS                  | ユーティリティファーストのCSSフレームワークで、迅速なUI開発を実現                                   | デモページのスタイリング、レスポンシブデザインの実装                                                                              |
-| **バックエンド**             | FastAPI                       | PythonベースのAPIフレームワークで、非同期処理とWebSocketをサポート                                  | REST APIエンドポイント（/api/meetings/ingest, /api/analyze等）とWebSocketエンドポイント（/api/execution/{execution_id}/ws）を実装 |
-|                                    | Python 3.11+                  | 主要なプログラミング言語。型ヒントとパフォーマンス改善を活用                                        | サービス層の実装、LLM統合、データ処理                                                                                             |
-|                                    | Uvicorn                       | ASGIサーバーで、FastAPIの非同期処理をサポート                                                       | 本番環境でのAPIサーバーとして使用                                                                                                 |
-| **AI/ML**                    | Gemini（Gen AI SDK）          | Google の生成AIモデル。ライブラリは google-generativeai（Gen AI SDK）。モデルは環境変数で指定     | 分析・タスク生成はデフォルトで **Gemini 3 Flash**（`LLM_MODEL`で変更可）。ADKエージェントはデフォルトで **Gemini 2.0 Flash**（`ADK_MODEL`で変更可）。マルチ視点LLM分析・タスク生成・説明文生成に利用 |
-| **データベース（将来実装）** | Firestore                     | NoSQLデータベース。誰が誰に報告するかなどの関係や、検知した問題の記録に適している                    | 組織グラフ（報告関係）の管理、検知した問題の記録、エスカレーション履歴の保存                                                      |
-|                                    | BigQuery                      | データウェアハウス。時系列データ分析とメトリクス集計に最適                                          | 時系列データ分析、メトリクス集計、長期トレンド分析                                                                                |
-| **Google Cloud統合**         | Google Meet API               | 議事録取得に使用                                                                                    | 会議議事録の取得、発言者抽出、KPI検出                                                                                             |
-|                                    | Google Chat API               | チャットメッセージ取得に使用                                                                        | チャットログの取得、本音の兆候検出                                                                                                |
-|                                    | Google Workspace API          | 資料生成と通知送信に使用                                                                            | 資料ドラフト作成、関係者への通知送信                                                                                              |
-|                                    | Google Drive API              | ファイル保存と共有に使用                                                                            | 生成された資料の保存、ダウンロードURL生成                                                                                         |
-| **リアルタイム通信**         | WebSocket                     | リアルタイム進捗更新に使用                                                                          | AI自律実行中の進捗をリアルタイムで配信                                                                                            |
+| カテゴリ                   | 技術                         | 選定理由                                                                                                       | 具体的活用方法                                                                                                                                                                                                      |
+| -------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **フロントエンド**   | Next.js 16.x                 | Reactベースのフレームワークで、SSRとSSGをサポート。デモページの高速表示を実現                                  | Case1/Case2/Case3のデモページを構築。API Client（lib/api.ts）でバックエンドと通信（実装は Next.js 16.0.x）                                                                                                          |
+|                            | TypeScript                   | 型安全性の確保により、開発時のエラーを早期発見                                                                 | APIレスポンスの型定義、コンポーネントの型安全性を確保                                                                                                                                                               |
+|                            | Tailwind CSS                 | ユーティリティファーストのCSSフレームワークで、迅速なUI開発を実現                                              | デモページのスタイリング、レスポンシブデザインの実装                                                                                                                                                                |
+| **バックエンド**     | FastAPI                      | PythonベースのAPIフレームワークで、非同期処理とWebSocketをサポート                                             | REST APIエンドポイント（/api/meetings/ingest, /api/analyze等）とWebSocketエンドポイント（/api/execution/{execution_id}/ws）を実装                                                                                   |
+|                            | Python 3.11+                 | 主要なプログラミング言語。型ヒントとパフォーマンス改善を活用                                                   | サービス層の実装、LLM統合、データ処理                                                                                                                                                                               |
+|                            | Uvicorn                      | ASGIサーバーで、FastAPIの非同期処理をサポート                                                                  | 本番環境でのAPIサーバーとして使用                                                                                                                                                                                   |
+| **AI/ML**            | Gemini（Gen AI SDK）         | Google の生成AIモデル。ライブラリは google-generativeai（Gen AI SDK）。モデルは環境変数で指定                  | 分析・タスク生成はデフォルトで**Gemini 3 Flash**（`LLM_MODEL`で変更可）。ADKエージェントはデフォルトで **Gemini 2.0 Flash**（`ADK_MODEL`で変更可）。マルチ視点LLM分析・タスク生成・説明文生成に利用 |
+| **データ・定義**     | JSON定義 / Firestore（設計） | 組織グラフ・RACI・承認フローは `config/definitions/` の JSON で管理。永続化・共有は Firestore を想定した設計 | 組織グラフ（報告関係）・RACI・承認フローテンプレートはファイルで管理。検知記録・エスカレーション履歴の永続化は設計段階                                                                                              |
+|                            | BigQuery                     | データウェアハウス。時系列データ分析とメトリクス集計に最適                                                     | 時系列データ分析、メトリクス集計、長期トレンド分析                                                                                                                                                                  |
+| **Google Cloud統合** | Google Meet API              | 議事録取得に使用                                                                                               | 会議議事録の取得、発言者抽出、KPI検出                                                                                                                                                                               |
+|                            | Google Chat API              | チャットメッセージ取得に使用                                                                                   | チャットログの取得、本音の兆候検出                                                                                                                                                                                  |
+|                            | Google Workspace API         | 資料生成と通知送信に使用                                                                                       | 資料ドラフト作成、関係者への通知送信                                                                                                                                                                                |
+|                            | Google Drive API             | ファイル保存と共有に使用                                                                                       | 生成された資料の保存、ダウンロードURL生成                                                                                                                                                                           |
+| **リアルタイム通信** | WebSocket                    | リアルタイム進捗更新に使用                                                                                     | AI自律実行中の進捗をリアルタイムで配信                                                                                                                                                                              |
 
-## 運用・非機能要件（スケールさせるために必要なもの）
+## 運用・非機能要件（スケール/将来実装）
 
 本記事では主にアーキテクチャとLLMまわりにフォーカスしていますが、実際にHelmを運用していく上では次のような非機能要件も重要になります。
 
@@ -375,13 +377,19 @@ flowchart TD
 - **再実行・冪等性**: 同じ会議ログに対して分析をやり直したときに、重複タスクや二重アラートが発生しないようにする
 - **監査ログ**: 「いつ・誰に対して・どんなアラート／タスクを出したか」が後から追えるような監査証跡
 
-これらの要件は、意思決定ガバナンスを「仕組み」として組織に根付かせるための土台として、今後の実装対象になります。
+### 現状の実装状況
+
+認証は API Key＋ロールで制御し、監査ログは `GET /api/audit/logs` で取得できる。
+データ保存期間と自動削除は `POST /api/admin/retention/cleanup`、execute は同一 approval_id で冪等に返す。
+誤検知フィードバック・精度指標API、取得範囲ホワイトリスト・サプレッションも簡易レベルで組み込んでいる。(ここでは省略)
+マルチテナント、ジョブキュー、通知ポリシー、オーナーシップモデルは設計段階。
 
 ### POINT：ルール×LLMによるハイブリッド評価
 
 Helmは、ルールベース分析とマルチ視点LLM分析を組み合わせたハイブリッド評価により、**判断の遅れや責任の曖昧さ**といった問題を、より信頼性高く検知できるようにしています。なぜこの2つを組み合わせる必要があるのか、それぞれの限界と利点を説明します。
 
 #### ルールベースの限界と利点
+
 ![](https://storage.googleapis.com/zenn-user-upload/c1dddf296b09-20260211.png)
 ルールベース分析は、定量的指標（KPI下方修正回数、撤退議論の有無、判断集中率など）に基づいて、判断の遅れや責任の曖昧さに繋がる問題を検知します。これは安全側のベースラインとして機能し、**見逃しゼロの安全網**を提供します。
 
@@ -399,6 +407,7 @@ Helmは、ルールベース分析とマルチ視点LLM分析を組み合わせ�
 しかし、LLM単体にも限界があります。楽観バイアス・ハルシネーションのリスクがあり、過剰なアラートを発する可能性があります。
 
 #### 結論：アンサンブルスコアリング
+
 ![ハイブリッド評価（ルールベース×LLM）](https://storage.googleapis.com/zenn-user-upload/5fa7bc0af770-20260211.png)
 *0.6×ルール + 0.4×LLM で信頼性の高い検知*
 Helmは、ルールベース結果とLLM結果を統合することで、より保守的で信頼性の高い評価を実現します：
@@ -425,8 +434,8 @@ flowchart LR
 
 また、「常に安全側の評価を採用する」設計は、短期的には見逃し防止に有効ですが、そのまま運用すると**アラート疲れ**を招きます。Helmでは次のような運用設計を前提にしています。
 
-- **精度指標のモニタリング**: Precision / Recall を追い、過剰アラートになっていないか定期的に検証する
-- **サプレッション**: 同種のアラートが一定時間内に繰り返し出た場合は、1件にまとめて通知する
+- **精度指標のモニタリング**: Precision / Recall を追い、過剰アラートになっていないか定期的に検証する（`GET /api/metrics/accuracy` で取得、誤検知は `POST /api/feedback/false-positive` で登録）
+- **サプレッション**: 同種のアラートが一定時間内に繰り返し出た場合は、1件にまとめて通知する（パターンID＋リソース単位の抑制設定で制御）
 - **ロール別の通知ポリシー**: 経営層には「本当にヤバいもの」だけを通知し、詳細は経営企画・ガバナンスチームでレビューする
 - **閾値調整**: 組織ごとに受容できるリスクに応じて、安全側の度合い（ルール／LLMのしきい値）を調整できる
 
@@ -457,7 +466,7 @@ Helmのビジョンは、**"Helm is where humans steer and AI rows."**です。
 **"人とAIでできた組織"を賢くする。」**
 :::
 
------
+---
 
 ## 参考資料
 
@@ -474,7 +483,11 @@ Helmのビジョンは、**"Helm is where humans steer and AI rows."**です。
 @[card](https://github.com/killertcell428/Helm/blob/main/DOCUMENTATION_INDEX.md)
 
 [^5]: https://rc.persol-group.co.jp/news/201809060935/
+    
 [^1]: https://prtimes.jp/main/html/rd/p/000000421.000045863.html
+    
 [^2]: https://prtimes.jp/main/html/rd/p/000000023.000004742.html
+    
 [^3]: https://www.pwc.com/jp/ja/knowledge/thoughtleadership/new-business-development-survey-2025.html
+    
 [^4]: https://www.nttdata.com/jp/ja/trends/event/archive/2024/097

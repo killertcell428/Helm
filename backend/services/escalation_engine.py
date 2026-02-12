@@ -10,14 +10,16 @@ import os
 
 class EscalationEngine:
     """エスカレーション判断エンジン"""
-    
-    def __init__(self, escalation_threshold: int = 50):
+
+    def __init__(self, escalation_threshold: int = 50, responsibility_resolver: Optional[Any] = None):
         """
         Args:
             escalation_threshold: エスカレーション閾値（スコア）
+            responsibility_resolver: RACI/承認フローから target_roles, approval_flow_id を解決する Resolver（任意）
         """
         self.escalation_threshold = escalation_threshold
-        self.demo_mode = os.getenv("DEMO_MODE", "true").lower() == "true"  # デモモード
+        self.demo_mode = os.getenv("DEMO_MODE", "true").lower() == "true"
+        self.responsibility_resolver = responsibility_resolver  # デモモード
     
     def should_escalate(self, analysis_result: Dict[str, Any]) -> bool:
         """
@@ -68,10 +70,16 @@ class EscalationEngine:
             analysis_result: 分析結果
             
         Returns:
-            ターゲットロール（現在は常に"Executive"）
+            ターゲットロール（Resolver があれば RACI の R の先頭、なければ "Executive"）
         """
-        # 将来的には、組織グラフを参照して適切なロールを決定
-        # 現在は常にExecutiveにエスカレーション
+        if self.responsibility_resolver:
+            try:
+                r = self.responsibility_resolver.resolve(analysis_result)
+                roles = r.get("target_roles") or []
+                if roles:
+                    return roles[0] if isinstance(roles[0], str) else "Executive"
+            except Exception:
+                pass
         return "Executive"
     
     def generate_escalation_reason(self, analysis_result: Dict[str, Any]) -> str:
@@ -171,7 +179,7 @@ class EscalationEngine:
             if not urgency or urgency == "LOW":
                 urgency = ensemble.get("urgency", urgency)
         
-        return {
+        out = {
             "analysis_id": analysis_id,
             "target_role": target_role,
             "reason": reason,
@@ -181,4 +189,14 @@ class EscalationEngine:
             "created_at": datetime.now().isoformat(),
             "status": "pending"
         }
+        if self.responsibility_resolver:
+            try:
+                r = self.responsibility_resolver.resolve(analysis_result)
+                if r.get("target_roles"):
+                    out["target_roles"] = r["target_roles"]
+                if r.get("approval_flow_id") is not None:
+                    out["approval_flow_id"] = r["approval_flow_id"]
+            except Exception:
+                pass
+        return out
 

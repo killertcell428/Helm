@@ -40,6 +40,25 @@ Executiveの承認後、Helmは**ADK (Agent Development Kit)** を使用した�
 **Phase1（実装完了）**: モック実装とADK統合、フォールバック対応
 **Phase2（実装予定）**: 実際のAPI統合（Vertex AI Search、Google Drive、Google Chat/Gmail API）
 
+### ガバナンス・運用まわり（実装済み）
+
+- **認証**: API Key ＋ ロール（`X-API-Key` ヘッダ）。環境変数 `API_KEYS` で有効化。オーナーキー1本の例は [backend README](./backend/README.md#api-key-認証オーナーキーで有効化) を参照。
+- **誤検知フィードバック・精度指標**: `POST /api/feedback/false-positive`、`GET /api/metrics/accuracy` で精度改善のためのフィードバックと指標取得。
+- **監査ログ**: アクション記録と `GET /api/audit/logs` での取得。
+- **取得範囲・サプレッション**: 取得対象のホワイトリスト（会議/チャットID）、検知のサプレッション条件（パターン＋リソース）を設定可能。
+- **データ保存期間**: 保持日数設定と `POST /api/admin/retention/cleanup` による定期削除。設計は [data-retention.md](./docs/data-retention.md)。
+- **冪等性**: 同一承認に対する execute の二重実行を防ぐ（設計は [idempotency-execute.md](./docs/idempotency-execute.md)）。
+- **定義ドキュメント駆動**: 組織グラフ・RACI・承認フローを JSON で管理（`backend/config/definitions/`）。EscalationEngine が RACI に基づきターゲットロールと承認フローを決定し、多段階承認をサポート。
+
+将来拡張の設計（オーナーシップ、マルチテナント、ジョブキュー、通知ポリシー）は [docs/future/](./docs/future/) を参照。
+
+### 現状の開発状況とネクストステップ
+
+- **現状**: コア機能（ingest / 検知・評価 / アラート・承認 / AI自律実行）、ガバナンス・運用（認証・監査・誤検知・サプレッション・保存期間・冪等性）、定義ドキュメント（組織グラフ・RACI・承認フロー）まで実装済み。Cloud Run / Vercel デプロイ済み。Zenn記事・デモ動画は制作中。
+- **ネクストステップ**: 短期＝制作物仕上げ（Zenn・動画）。中期＝ADK Phase2（実API統合）、Case 2/3、永続化・会議調整。長期＝マルチテナント・ジョブキュー・通知ポリシー・オーナーシップ（設計は [docs/future/](./docs/future/)）。
+
+詳細は [開発状況サマリー](./docs/status/DEVELOPMENT_STATUS_SUMMARY.md) と [次のステップ](./docs/status/NEXT_STEPS.md) を参照。
+
 ## 📚 ドキュメント
 
 **初めての方はこちらから:**
@@ -63,6 +82,8 @@ Dev/
 │           └── api.ts         # APIクライアント
 ├── backend/                    # バックエンド（Python FastAPI）
 │   ├── main.py                # メインAPI
+│   ├── config/
+│   │   └── definitions/       # 組織グラフ・RACI・承認フロー（JSON）
 │   ├── services/              # サービス層
 │   │   ├── google_meet.py     # Google Meet統合
 │   │   ├── google_chat.py     # Google Chat統合
@@ -71,6 +92,13 @@ Dev/
 │   │   ├── ensemble_scoring.py     # アンサンブルスコアリング
 │   │   ├── llm_service.py     # LLM統合サービス
 │   │   ├── scoring.py          # スコアリングサービス
+│   │   ├── escalation_engine.py    # エスカレーション判断
+│   │   ├── definition_loader.py    # 定義ドキュメント読み込み
+│   │   ├── responsibility_resolver.py  # RACI/承認フロー解決
+│   │   ├── approval_flow_engine.py # 多段階承認フロー
+│   │   ├── audit_log.py       # 監査ログ
+│   │   ├── evaluation_metrics.py   # 精度指標・誤検知フィードバック
+│   │   ├── retention_cleanup.py    # データ保存期間に基づく削除
 │   │   ├── google_workspace.py # Google Workspace統合
 │   │   ├── google_drive.py     # Google Drive統合
 │   │   ├── adk_setup.py        # ADKセットアップ
@@ -179,6 +207,7 @@ Google Meet → 議事録・チャット取得 → マルチ視点評価（ル�
 - [📐 アーキテクチャドキュメント](./ARCHITECTURE.md) - システム全体の設計
 - [📖 APIドキュメント](./backend/API_DOCUMENTATION.md) - 全APIエンドポイントの詳細
 - [🔧 開発者ガイド](./docs/guides/DEVELOPER_GUIDE.md) - 開発者向けガイド
+- [認証設計（API Key）](./docs/auth-api-key-roles.md) | [データ保存期間](./docs/data-retention.md) | [冪等性（execute）](./docs/idempotency-execute.md) | [将来実装（docs/future/）](./docs/future/)
 - [バックエンドセットアップガイド](./backend/SETUP.md)
 - [ADKセットアップガイド](./backend/ADK_SETUP.md) - ADKベースのマルチエージェントシステムのセットアップ
 - [テスト実行サマリー](./backend/TEST_SETUP_SUMMARY.md) - テストの実行方法

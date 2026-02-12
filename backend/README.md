@@ -58,6 +58,19 @@ pip install -r requirements_minimal.txt
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+### API Key 認証（オーナーキーで有効化）
+
+認証を有効にすると、`/api/*` へのリクエストに **`X-API-Key` ヘッダ必須**になります。
+
+1. **オーナー用キーを1本だけ使う場合**  
+   `.env` に以下を追加（UTF-8 で保存）。  
+   `API_KEYS=[{"key":"helm-owner-dev-key","role":"owner"}]`  
+   本番ではキーを必ず別の値に変更してください。
+2. サーバー再起動後、キーなしで `/api/metrics/accuracy` などにアクセス → **401**。  
+   ヘッダ `X-API-Key: helm-owner-dev-key` を付ける → **200**。
+
+サンプルは `backend/.env.example` を参照。詳細は [認証設計](../docs/auth-api-key-roles.md) を参照。
+
 **注意:** 現在はモックデータを使用しているため、`requirements_minimal.txt` で十分です。Windows環境でインストールエラーが発生する場合も、`requirements_minimal.txt` を使用してください。
 
 ## APIエンドポイント
@@ -67,10 +80,14 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - `POST /api/analyze` - 構造的問題検知
 - `GET /api/analysis/{id}` - 分析結果取得
 - `POST /api/escalate` - Executive呼び出し
-- `POST /api/approve` - Executive承認
-- `POST /api/execute` - AI自律実行開始
+- `POST /api/approve` - Executive承認（多段階承認フロー対応・`reject`・`approver_role_id`）
+- `POST /api/execute` - AI自律実行開始（冪等: 同一 approval_id は既存実行を返す）
 - `GET /api/execution/{id}` - 実行状態取得
 - `GET /api/execution/{id}/results` - 実行結果取得
+- `POST /api/feedback/false-positive` - 誤検知フィードバック
+- `GET /api/metrics/accuracy` - 精度指標取得
+- `GET /api/audit/logs` - 監査ログ取得
+- `POST /api/admin/retention/cleanup` - データ保存期間に基づく削除
 
 ## 評価システム
 

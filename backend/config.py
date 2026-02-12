@@ -4,7 +4,8 @@
 """
 
 import os
-from typing import Optional
+import json
+from typing import Optional, List, Dict, Any
 
 
 class Config:
@@ -50,6 +51,45 @@ class Config:
     # エスカレーション設定
     ESCALATION_THRESHOLD: int = int(os.getenv("ESCALATION_THRESHOLD", "70"))  # エスカレーション閾値
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() == "true"  # デモモード: findingsがあれば常にエスカレーション
+
+    # 取得範囲ホワイトリスト（空の場合は全件許可。カンマ区切りで meeting_id または chat_id を指定）
+    INGEST_MEETING_IDS_WHITELIST: list = [
+        x.strip() for x in os.getenv("INGEST_MEETING_IDS_WHITELIST", "").split(",") if x.strip()
+    ]
+    INGEST_CHAT_IDS_WHITELIST: list = [
+        x.strip() for x in os.getenv("INGEST_CHAT_IDS_WHITELIST", "").split(",") if x.strip()
+    ]
+
+    # サプレッション: 検知を抑制する条件。JSON配列で [{"pattern_id":"X","meeting_id":"m1"}, ...]。resource 指定が無い場合はその pattern を全件抑制
+    _suppression_json = os.getenv("SUPPRESSION_RULES", "[]")
+    SUPPRESSION_RULES: List[Dict[str, Any]] = []
+    try:
+        if _suppression_json.strip():
+            SUPPRESSION_RULES = json.loads(_suppression_json)
+            if not isinstance(SUPPRESSION_RULES, list):
+                SUPPRESSION_RULES = []
+    except json.JSONDecodeError:
+        SUPPRESSION_RULES = []
+
+    # API Key 認証（JSON配列: [{"key":"xxx","role":"operator"}, ...]。空なら認証無効）
+    _api_keys_json = os.getenv("API_KEYS", "[]")
+    API_KEYS: List[Dict[str, str]] = []
+    try:
+        if _api_keys_json.strip():
+            API_KEYS = json.loads(_api_keys_json)
+            if not isinstance(API_KEYS, list):
+                API_KEYS = []
+    except json.JSONDecodeError:
+        API_KEYS = []
+
+    # データ保存期間（日数）。未設定時はデフォルト値
+    RETENTION_DAYS_MEETINGS: int = int(os.getenv("RETENTION_DAYS_MEETINGS", "90"))
+    RETENTION_DAYS_CHATS: int = int(os.getenv("RETENTION_DAYS_CHATS", "90"))
+    RETENTION_DAYS_MATERIALS: int = int(os.getenv("RETENTION_DAYS_MATERIALS", "90"))
+    RETENTION_DAYS_ANALYSES: int = int(os.getenv("RETENTION_DAYS_ANALYSES", "180"))
+    RETENTION_DAYS_ESCALATIONS: int = int(os.getenv("RETENTION_DAYS_ESCALATIONS", "365"))
+    RETENTION_DAYS_APPROVALS: int = int(os.getenv("RETENTION_DAYS_APPROVALS", "365"))
+    RETENTION_DAYS_EXECUTIONS: int = int(os.getenv("RETENTION_DAYS_EXECUTIONS", "365"))
     
     # LLM統合設定
     USE_LLM: bool = os.getenv("USE_LLM", "false").lower() == "true"  # LLM統合を有効化

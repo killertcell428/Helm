@@ -46,11 +46,17 @@ except ImportError as e:
 class EnhancedEscalationEngine:
     """拡張エスカレーションエンジン（既存機能との互換性を保つ）"""
     
-    def __init__(self, escalation_threshold: int = 50, use_enhanced_features: bool = True):
+    def __init__(
+        self,
+        escalation_threshold: int = 50,
+        use_enhanced_features: bool = True,
+        responsibility_resolver: Optional[Any] = None,
+    ):
         """
         Args:
             escalation_threshold: エスカレーション閾値（スコア）
             use_enhanced_features: 拡張機能を使用するか（Falseの場合は既存機能のみ）
+            responsibility_resolver: RACI/承認フロー解決用（legacy_engine に渡す）
         """
         self.escalation_threshold = escalation_threshold
         self.use_enhanced_features = use_enhanced_features
@@ -58,7 +64,10 @@ class EnhancedEscalationEngine:
         
         # 既存のエスカレーションエンジン（フォールバック用）
         if LEGACY_ESCALATION_AVAILABLE:
-            self.legacy_engine = EscalationEngine(escalation_threshold=escalation_threshold)
+            self.legacy_engine = EscalationEngine(
+                escalation_threshold=escalation_threshold,
+                responsibility_resolver=responsibility_resolver,
+            )
         else:
             self.legacy_engine = None
         
@@ -204,6 +213,16 @@ class EnhancedEscalationEngine:
                                 logger.warning(f"Failed to calculate confidence: {e}")
                                 # エラー時は確信度情報なしで続行
                         
+                        # RACI/承認フローから target_roles, approval_flow_id を付与
+                        if self.legacy_engine and getattr(self.legacy_engine, "responsibility_resolver", None):
+                            try:
+                                r = self.legacy_engine.responsibility_resolver.resolve(analysis_result)
+                                if r.get("target_roles"):
+                                    escalation_data["target_roles"] = r["target_roles"]
+                                if r.get("approval_flow_id") is not None:
+                                    escalation_data["approval_flow_id"] = r["approval_flow_id"]
+                            except Exception:
+                                pass
                         return escalation_data
                 except Exception as e:
                     logger.warning(f"Failed to create staged escalation: {e}, falling back to legacy engine")
