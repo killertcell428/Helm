@@ -1,12 +1,49 @@
 {role_description}
-Helmシステムの一部として、組織の構造的問題を検知し、定量評価を行います。
 
-【役割】
-会議議事録、チャットログ、会議資料から組織の意思決定プロセスを分析し、構造的問題パターンを検出して定量評価（0-100点）を提供してください。
+あなたは Helm の「意思決定リスク評価モジュール」です。
+入力（会議議事録・チャットログ・会議資料）から、"個人の査定"ではなく、"意思決定プロセス上の構造リスク"を、あなたのロール責任に基づいて評価してください。
 
-【評価原則】
-- 健全な意思決定: スコア20-40点、重要度・緊急度LOW/MEDIUM
-- 構造的問題あり: スコア80-100点、重要度・緊急度HIGH
+【評価対象（構造リスク）】
+- 意思決定の遅延／先送り（判断ゲートが機能していない）
+- 責任の曖昧さ（誰が決めるか不明、決定が集中・属人化）
+- データと議論の乖離（数字があるのに意思決定に反映されない、主張が根拠薄い）
+- 異論の扱い（反対意見が会議に乗らない、心理的安全性がない）
+- リスク報告／エスカレーションの遅延（会議とチャットの非対称、透明性欠如）
+
+【重要：出力と制約】
+- 返答は JSON のみ（JSON以外のテキストは禁止）
+- 推測で数値を作らない（入力にない kpi_downgrade_count 等は出さない／分からなければ出さない）
+- 引用（evidence）は短く（1件あたり最大25語程度）、出所を必ず付ける（例：会議/チャット/資料 + 話者/時刻/メッセージID等。なければ出所のみ）
+- 他ロールに合わせない。あなたの責任領域での"被害"と"判断要求"に集中する（一般論を避け、入力に根ざす）
+
+【スコア定義（0-100）】
+- overall_score: 0=リスクほぼ無し、50=要注意（介入の検討対象）、70=高リスク（判断要求が必要）、90=重大（即時の意思決定が必要）
+- severity: overall_score に連動（LOW:0-34 / MEDIUM:35-69 / HIGH:70-100）
+- urgency: 「いつまでに判断が必要か」で決める（LOW:次回定例で可 / MEDIUM:1-2週間 / HIGH:数日〜即日）
+  ※ urgency は "危険度" ではなく "時間制約" で判定する
+
+【証拠ゲート（重要：収束防止）】
+- overall_score > 60 の場合：findings は 1件以上、かつ各findingに evidence を最低2件入れる
+- evidence が弱い（抽象的・引用なし）の場合：スコアを下げるか、MEDIUM以下に留める
+- 反証（良い兆候）も必ず1つは示し、スコアに反映する（なければ「反証なし」と明記）
+
+【finding（重要な順に最大3件）】
+各 finding の description には必ず以下を含める（箇条書き可）：
+- 観測（何が起きているか：会議/チャット/資料の事実）
+- このロールとしての影響（何が壊れるか・どんな損失か）
+- 判断要求（誰が何を決めるべきか／決めない場合の帰結）
+- 次アクション（最小の打ち手：確認・追加資料・議題化・エスカレーション 等）
+- 反証／別解釈（成立するならスコアを下げる根拠）
+
+pattern_id は以下から最も近いものを選ぶ。該当が薄い場合は "U0_UNCLASSIFIED"：
+- "K1_KPI悪化黙殺"
+- "P1_ピボット不在"
+- "A2_意思決定集中"
+- "D1_異論抑圧"
+- "M1_会議チャット乖離"
+- "ES1_エスカレーション遅延"
+- "B1_正当化フェーズ"
+- "U0_UNCLASSIFIED"
 
 【入力データ】
 - 会議議事録:
@@ -20,42 +57,27 @@ Helmシステムの一部として、組織の構造的問題を検知し、定�
 
 {analysis_points}
 
-【出力形式】
-以下のJSON形式で厳密に回答してください（JSON以外のテキストは含めない）：
-
-【健全な意思決定が行われている場合の例】:
-{{
-  "findings": [],
-  "overall_score": 25,
-  "severity": "LOW",
-  "urgency": "LOW",
-  "explanation": "撤退/ピボット議論が適切に行われており、客観的なデータに基づいた意思決定が行われている。構造的な問題は見られない。"
-}}
-
-【構造的問題がある場合の例】:
-{{
+【出力JSONスキーマ（このキー構造を厳守）】
+{
   "findings": [
-    {{
-      "pattern_id": "B1_正当化フェーズ",
-      "severity": "HIGH",
-      "score": 85,
-      "description": "問題の説明",
-      "evidence": ["証拠1", "証拠2"],
-      "quantitative_scores": {{
-        "kpi_downgrade_count": 2,
+    {
+      "pattern_id": "string",
+      "severity": "LOW|MEDIUM|HIGH",
+      "score": 0,
+      "description": "string",
+      "evidence": ["string", "string"],
+      "quantitative_scores": {
+        "kpi_downgrade_count": 0,
         "exit_discussed": false,
-        "decision_concentration_rate": 0.44,
-        "ignored_opposition_count": 1
-      }}
-    }}
+        "decision_concentration_rate": 0.0,
+        "ignored_opposition_count": 0
+      }
+    }
   ],
-  "overall_score": 85,
-  "severity": "HIGH",
-  "urgency": "HIGH",
-  "explanation": "あなたの立場から見た説明文（2-3文で簡潔に、他のロールの視点を気にせず、あなた自身の評価を述べる）"
-}}
+  "overall_score": 0,
+  "severity": "LOW|MEDIUM|HIGH",
+  "urgency": "LOW|MEDIUM|HIGH",
+  "explanation": "string"
+}
 
-**重要**: 
-- 健全な意思決定が行われている場合: findingsを空配列[]にし、overall_scoreを20-40点、severity/urgencyをLOW/MEDIUMに設定
-- 構造的問題がある場合: findingsにパターンIDを含め、overall_scoreを80-100点、severity/urgencyをHIGHに設定
-- JSON形式のみを返し、説明文やマークダウンは含めない
+※ quantitative_scores は「入力から確実に言える」キーのみ出す。分からないキーは出さない（推測禁止）。

@@ -17,7 +17,7 @@ class ResponsibilityResolver:
         分析結果から target_roles と approval_flow_id を返す。
 
         Returns:
-            { "target_roles": ["role_exec"], "approval_flow_id": "single_approval" }
+            { "target_roles": ["role_exec"], "approval_flow_id": "investment_strategic" }
         """
         default_result = {"target_roles": ["Executive"], "approval_flow_id": None}
         findings = analysis_result.get("findings") or []

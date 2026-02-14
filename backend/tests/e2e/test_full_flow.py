@@ -94,20 +94,36 @@ class TestFullFlow:
             
             escalation_id = escalation_data["escalation_id"]
             
-            # 5. Executive承認
-            approve_response = requests.post(
-                f"{BASE_URL}/api/approve",
-                json={
-                    "escalation_id": escalation_id,
-                    "decision": "approve"
-                }
-            )
-            assert approve_response.status_code == 200
-            approval_data = approve_response.json()
-            assert "approval_id" in approval_data
-            assert approval_data["decision"] == "approve"
-            
-            approval_id = approval_data["approval_id"]
+            # 5. 承認（多段階フローの場合は繰り返し。stage_id に対応する approver_role_id で承認）
+            # フロー定義に合わせた stage -> role マッピング
+            stage_approver = {
+                "pending_cfo": "role_cfo",
+                "pending_exec": "role_exec",
+                "pending_planning": "dept_planning",
+            }
+            approval_id = None
+            for _ in range(5):  # 最大5回（無限ループ防止）
+                approve_response = requests.post(
+                    f"{BASE_URL}/api/approve",
+                    json={
+                        "escalation_id": escalation_id,
+                        "decision": "approve",
+                        "approver_role_id": stage_approver.get(
+                            escalation_data.get("current_stage_id", ""),
+                            "role_exec"  # 単一承認フロー等のフォールバック
+                        )
+                    }
+                )
+                assert approve_response.status_code == 200
+                approval_data = approve_response.json()
+                if "approval_id" in approval_data:
+                    approval_id = approval_data["approval_id"]
+                    assert approval_data["decision"] == "approve"
+                    break
+                if approval_data.get("status") == "rejected":
+                    pytest.fail("承認が却下されました")
+                escalation_data = approval_data
+            assert approval_id, "approval_id が取得できませんでした（多段階承認が完了していない可能性）"
             
             # 6. AI自律実行開始
             execute_response = requests.post(
@@ -207,16 +223,33 @@ class TestFullFlow:
         escalation_data = escalate_response.json()
         escalation_id = escalation_data["escalation_id"]
 
-        approve_response = requests.post(
-            f"{BASE_URL}/api/approve",
-            json={
-                "escalation_id": escalation_id,
-                "decision": "approve",
-            },
-        )
-        assert approve_response.status_code == 200
-        approval_data = approve_response.json()
-        approval_id = approval_data["approval_id"]
+        stage_approver = {
+            "pending_cfo": "role_cfo",
+            "pending_exec": "role_exec",
+            "pending_planning": "dept_planning",
+        }
+        approval_id = None
+        for _ in range(5):
+            approve_response = requests.post(
+                f"{BASE_URL}/api/approve",
+                json={
+                    "escalation_id": escalation_id,
+                    "decision": "approve",
+                    "approver_role_id": stage_approver.get(
+                        escalation_data.get("current_stage_id", ""),
+                        "role_exec"
+                    ),
+                },
+            )
+            assert approve_response.status_code == 200
+            approval_data = approve_response.json()
+            if "approval_id" in approval_data:
+                approval_id = approval_data["approval_id"]
+                break
+            if approval_data.get("status") == "rejected":
+                pytest.fail("承認が却下されました")
+            escalation_data = approval_data
+        assert approval_id, "approval_id が取得できませんでした"
 
         execute_response = requests.post(
             f"{BASE_URL}/api/execute",

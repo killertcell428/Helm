@@ -240,22 +240,29 @@ class TestApprove:
             )
             
             if escalate_response.status_code == 200:
-                escalation_id = escalate_response.json()["escalation_id"]
-                
-                # 承認
-                response = requests.post(
-                    f"{BASE_URL}/api/approve",
-                    json={
-                        "escalation_id": escalation_id,
-                        "decision": "approve"
-                    }
-                )
-                
-                assert response.status_code == 200
-                data = response.json()
-                assert "approval_id" in data
-                assert "decision" in data
-                assert data["decision"] == "approve"
+                escalation_data = escalate_response.json()
+                escalation_id = escalation_data["escalation_id"]
+                stage_approver = {"pending_cfo": "role_cfo", "pending_exec": "role_exec", "pending_planning": "dept_planning"}
+                approval_id = None
+                for _ in range(5):
+                    response = requests.post(
+                        f"{BASE_URL}/api/approve",
+                        json={
+                            "escalation_id": escalation_id,
+                            "decision": "approve",
+                            "approver_role_id": stage_approver.get(escalation_data.get("current_stage_id", ""), "role_exec")
+                        }
+                    )
+                    assert response.status_code == 200
+                    data = response.json()
+                    if "approval_id" in data:
+                        approval_id = data["approval_id"]
+                        assert data["decision"] == "approve"
+                        break
+                    if data.get("status") == "rejected":
+                        break
+                    escalation_data = data
+                assert approval_id, "approval_id が取得できませんでした"
 
 
 class TestExecute:
@@ -286,19 +293,28 @@ class TestExecute:
             )
             
             if escalate_response.status_code == 200:
-                escalation_id = escalate_response.json()["escalation_id"]
-                
-                approve_response = requests.post(
-                    f"{BASE_URL}/api/approve",
-                    json={
-                        "escalation_id": escalation_id,
-                        "decision": "approve"
-                    }
-                )
-                
-                if approve_response.status_code == 200:
-                    approval_id = approve_response.json()["approval_id"]
-                    
+                escalation_data = escalate_response.json()
+                escalation_id = escalation_data["escalation_id"]
+                stage_approver = {"pending_cfo": "role_cfo", "pending_exec": "role_exec", "pending_planning": "dept_planning"}
+                approval_id = None
+                for _ in range(5):
+                    approve_response = requests.post(
+                        f"{BASE_URL}/api/approve",
+                        json={
+                            "escalation_id": escalation_id,
+                            "decision": "approve",
+                            "approver_role_id": stage_approver.get(escalation_data.get("current_stage_id", ""), "role_exec")
+                        }
+                    )
+                    if approve_response.status_code == 200:
+                        ad = approve_response.json()
+                        if "approval_id" in ad:
+                            approval_id = ad["approval_id"]
+                            break
+                        if ad.get("status") == "rejected":
+                            break
+                        escalation_data = ad
+                if approval_id:
                     # 実行開始
                     response = requests.post(
                         f"{BASE_URL}/api/execute",
