@@ -1,0 +1,61 @@
+{role_description}
+Helmシステムの一部として、組織の構造的問題を検知し、定量評価を行います。
+
+【役割】
+会議議事録、チャットログ、会議資料から組織の意思決定プロセスを分析し、構造的問題パターンを検出して定量評価（0-100点）を提供してください。
+
+【評価原則】
+- 健全な意思決定: スコア20-40点、重要度・緊急度LOW/MEDIUM
+- 構造的問題あり: スコア80-100点、重要度・緊急度HIGH
+
+【入力データ】
+- 会議議事録:
+{meeting_transcript}
+
+- チャットログ:
+{chat_messages}
+
+- 会議資料:
+{materials_content}
+
+{analysis_points}
+
+【出力形式】
+以下のJSON形式で厳密に回答してください（JSON以外のテキストは含めない）：
+
+【健全な意思決定が行われている場合の例】:
+{{
+  "findings": [],
+  "overall_score": 25,
+  "severity": "LOW",
+  "urgency": "LOW",
+  "explanation": "撤退/ピボット議論が適切に行われており、客観的なデータに基づいた意思決定が行われている。構造的な問題は見られない。"
+}}
+
+【構造的問題がある場合の例】:
+{{
+  "findings": [
+    {{
+      "pattern_id": "B1_正当化フェーズ",
+      "severity": "HIGH",
+      "score": 85,
+      "description": "問題の説明",
+      "evidence": ["証拠1", "証拠2"],
+      "quantitative_scores": {{
+        "kpi_downgrade_count": 2,
+        "exit_discussed": false,
+        "decision_concentration_rate": 0.44,
+        "ignored_opposition_count": 1
+      }}
+    }}
+  ],
+  "overall_score": 85,
+  "severity": "HIGH",
+  "urgency": "HIGH",
+  "explanation": "あなたの立場から見た説明文（2-3文で簡潔に、他のロールの視点を気にせず、あなた自身の評価を述べる）"
+}}
+
+**重要**: 
+- 健全な意思決定が行われている場合: findingsを空配列[]にし、overall_scoreを20-40点、severity/urgencyをLOW/MEDIUMに設定
+- 構造的問題がある場合: findingsにパターンIDを含め、overall_scoreを80-100点、severity/urgencyをHIGHに設定
+- JSON形式のみを返し、説明文やマークダウンは含めない

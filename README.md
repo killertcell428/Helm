@@ -95,7 +95,8 @@ Dev/
 ├── backend/                    # バックエンド（Python FastAPI）
 │   ├── main.py                # メインAPI
 │   ├── config/
-│   │   └── definitions/       # 組織グラフ・RACI・承認フロー（JSON）
+│   │   ├── definitions/       # 組織グラフ・RACI・承認フロー（JSON）
+│   │   └── prompts/           # LLMプロンプト（ヒトが編集可能、組織グラフと同様）
 │   ├── services/              # サービス層
 │   │   ├── google_meet.py     # Google Meet統合
 │   │   ├── google_chat.py     # Google Chat統合

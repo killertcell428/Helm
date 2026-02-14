@@ -6,11 +6,20 @@ ADK統合、モック実装、フォールバック対応
 
 from services.adk_setup import get_model, get_or_create_runner, ADK_AVAILABLE
 from services.google_workspace import GoogleWorkspaceService
+from services.prompts.loader import load_agent_instruction, load_agent_prompt_template
 from typing import Dict, Any, Optional, List
 import logging
 import json
 
 logger = logging.getLogger(__name__)
+
+# フォールバック用instruction（ファイル読み込み失敗時）
+_ANALYSIS_INSTRUCTION_FALLBACK = """
+過去の戦略変更事例、類似プロジェクトの成功/失敗データを収集し、
+継続案、縮小案、撤退案の財務シミュレーションを実行してください。
+fetch_internal_data関数でデータを取得し、perform_financial_simulation関数で分析してください。
+結果は構造化された形式（JSON形式）で返してください。
+"""
 
 # モックツールの戻り値スキーマを固定（将来のAPI統合を見据える）
 def fetch_internal_data(query: str) -> str:
@@ -78,16 +87,15 @@ def build_analysis_agent():
     
     from google.adk.agents.llm_agent import Agent  # or LlmAgent
     
+    instruction = load_agent_instruction("analysis")
+    if not instruction:
+        instruction = _ANALYSIS_INSTRUCTION_FALLBACK.strip()
+    
     return Agent(
         name="analysis_agent",
         model=model,  # llm=ではなくmodel=（公式API準拠）
         description="社内データを統合・分析し、財務シミュレーションを実行するエージェント",
-        instruction="""
-        過去の戦略変更事例、類似プロジェクトの成功/失敗データを収集し、
-        継続案、縮小案、撤退案の財務シミュレーションを実行してください。
-        fetch_internal_data関数でデータを取得し、perform_financial_simulation関数で分析してください。
-        結果は構造化された形式（JSON形式）で返してください。
-        """,
+        instruction=instruction,
         tools=[internal_data_tool, financial_sim_tool] if internal_data_tool else []
     )
 
@@ -109,7 +117,9 @@ async def execute_analysis_task(task: Dict[str, Any], context: Dict[str, Any]) -
             session_id = str(uuid.uuid4())
             await session_service.create_session(app_name=app_name, user_id=user_id, session_id=session_id)
             
-            prompt = f"社内データを統合し、財務シミュレーションを実行してください。{task.get('description', '')}"
+            description = task.get('description', '')
+            template = load_agent_prompt_template("analysis")
+            prompt = template.format(description=description) if template else f"社内データを統合し、財務シミュレーションを実行してください。{description}"
             
             # async関数内ではrun_async()を使用
             from google.genai import types

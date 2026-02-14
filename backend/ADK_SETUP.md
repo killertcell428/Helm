@@ -52,12 +52,21 @@ GOOGLE_API_KEY=your-api-key-here
 
 #### ADK 用モデル名（オプション）
 
-ADK エージェントが使うモデルは環境変数 `ADK_MODEL` で指定できます。未設定時は `gemini-2.0-flash` を使用します。  
-API で `models/gemini-1.5-flash is not found` となる場合は、次を設定してください。
+ADK エージェントが使うモデルは、LLM評価と同じモデルに統一されています。
+
+- **ADK_MODEL**: 明示指定時はこれを使用（上書き）
+- **LLM_MODEL**: ADK_MODEL 未設定時は LLM評価と同じモデルを使用（推奨）
+- **フォールバック**: 両方未設定時は `gemini-2.0-flash`
 
 ```env
+# LLM評価とADKで同じモデルを使う（デフォルト）
+LLM_MODEL=gemini-3-flash-preview
+
+# ADKのみ別モデルにしたい場合
 ADK_MODEL=gemini-2.0-flash
 ```
+
+プロンプト（instruction）は `config/prompts/agents/` で管理。編集可能。詳細は [config/prompts/README.md](./config/prompts/README.md)。
 
 ## 3. Vertex AI使用時の設定（オプション）
 

@@ -7,11 +7,20 @@ Phase1では送信せず、ドラフト生成のみ
 
 from services.adk_setup import get_model, get_or_create_runner, ADK_AVAILABLE
 from services.google_chat import GoogleChatService
+from services.prompts.loader import load_agent_instruction, load_agent_prompt_template
 from typing import Dict, Any, Optional, List
 import logging
 import json
 
 logger = logging.getLogger(__name__)
+
+# フォールバック用instruction（ファイル読み込み失敗時）
+_NOTIFICATION_INSTRUCTION_FALLBACK = """
+通知対象者と文脈に基づいて、適切な通知メッセージを生成してください。
+generate_notification_message関数でメッセージを生成し、send_notification関数でドラフトを作成してください。
+メッセージは丁寧で明確な日本語で作成してください。
+注意: Phase1では実際の送信は行わず、ドラフトのみ生成します。
+"""
 
 # モックツールの戻り値スキーマを固定（将来のAPI統合を見据える）
 def generate_notification_message(recipients: str, document_url: str, context: str) -> str:
@@ -60,16 +69,15 @@ def build_notification_agent():
     
     from google.adk.agents.llm_agent import Agent  # or LlmAgent
     
+    instruction = load_agent_instruction("notification")
+    if not instruction:
+        instruction = _NOTIFICATION_INSTRUCTION_FALLBACK.strip()
+    
     return Agent(
         name="notification_agent",
         model=model,  # llm=ではなくmodel=（公式API準拠）
         description="関係部署への通知メッセージを生成・送信するエージェント",
-        instruction="""
-        通知対象者と文脈に基づいて、適切な通知メッセージを生成してください。
-        generate_notification_message関数でメッセージを生成し、send_notification関数でドラフトを作成してください。
-        メッセージは丁寧で明確な日本語で作成してください。
-        注意: Phase1では実際の送信は行わず、ドラフトのみ生成します。
-        """,
+        instruction=instruction,
         tools=[message_gen_tool, send_notif_tool] if message_gen_tool else []
     )
 
@@ -95,12 +103,18 @@ async def execute_notification_task(task: Dict[str, Any], context: Dict[str, Any
             document_url = context.get("document_url", "")
             # 実際はタスクやコンテキストから取得（例: ["CFO", "通信本部長", "DX本部長"]）
             recipients = ["CFO", "通信本部長", "DX本部長"]
+            recipients_str = ", ".join(recipients)
+            description = task.get('description', '')
             
-            prompt = f"""
+            template = load_agent_prompt_template("notification")
+            if template:
+                prompt = template.format(recipients=recipients_str, document_url=document_url, description=description)
+            else:
+                prompt = f"""
             以下の情報を基に通知ドラフトを生成してください:
-            - 対象者: {', '.join(recipients)}
+            - 対象者: {recipients_str}
             - 資料URL: {document_url}
-            - 文脈: {task.get('description', '')}
+            - 文脈: {description}
             注意: Phase1では実際の送信は行わず、ドラフトのみ生成してください。
             """
             

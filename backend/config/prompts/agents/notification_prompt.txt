@@ -1,0 +1,5 @@
+以下の情報を基に通知ドラフトを生成してください:
+- 対象者: {recipients}
+- 資料URL: {document_url}
+- 文脈: {description}
+注意: Phase1では実際の送信は行わず、ドラフトのみ生成してください。

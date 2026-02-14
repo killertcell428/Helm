@@ -28,13 +28,17 @@ _runners: Dict[str, tuple] = {}
 def get_model():
     """LLMモデルインスタンスを取得（環境変数に基づいて選択、公式API準拠）
     
-    モデル名: ADK_MODEL で指定。未設定時は gemini-2.0-flash。
-    gemini-1.5-flash は API v1beta で NOT_FOUND になるため、2.0 系をデフォルトにしている。
+    モデル名: ADK_MODEL で明示指定時はそれを使用。
+    未設定時は LLM_MODEL（LLM評価と同じモデル）を使用し、統一性を確保。
+    両方未設定時は gemini-2.0-flash をフォールバック（従来の確実に動く仕様）。
     """
     if not ADK_AVAILABLE:
         return None  # モックモード
     
-    model_name = os.getenv("ADK_MODEL", "gemini-2.0-flash")
+    # ADK_MODEL > LLM_MODEL > gemini-2.0-flash（フォールバック）
+    model_name = os.getenv("ADK_MODEL") or os.getenv("LLM_MODEL") or "gemini-2.0-flash"
+    if model_name.startswith("models/"):
+        model_name = model_name.replace("models/", "")
     use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() == "true"
     
     if use_vertex:

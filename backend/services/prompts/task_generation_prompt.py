@@ -1,10 +1,60 @@
 """
 タスク生成用プロンプト生成
 Executive承認に基づいて実行可能なタスクを生成するためのプロンプトを構築
+config/prompts/task_generation.txt から読み込み、ファイルがなければフォールバック
 """
 
 from typing import Dict, Any, Optional
 import json
+from services.prompts.loader import load_task_generation_template
+
+
+# フォールバック用テンプレート（ファイル読み込み失敗時）
+_TASK_GENERATION_FALLBACK = """あなたは組織の意思決定を支援するAIエージェントです。
+Helmシステムの一部として、Executive承認に基づいて実行可能なタスクを生成します。
+
+【役割】
+- 分析結果とExecutive承認内容から、具体的な実行タスクを設計
+- タスクの依存関係を考慮
+- 各タスクの実行方法と期待される成果物を明確化
+
+【入力データ】
+- 分析結果:
+{analysis_result_json}
+
+- Executive承認内容:
+- 決定: {decision}
+- 修正内容: {modifications}
+
+- 承認された介入案:
+{interventions}
+
+【タスク設計の原則】
+1. 分析結果で検出された問題に対応する
+2. Executive承認内容を反映する
+3. 実行可能で具体的なタスクにする
+4. 依存関係を明確にする（例: データ分析 → 資料生成 → 通知）
+
+【出力形式】
+以下のJSON形式で厳密に回答してください（JSON以外のテキストは含めない）：
+{{
+  "tasks": [
+    {{
+      "id": "task1",
+      "name": "タスク名（具体的で実行可能）",
+      "type": "research|analysis|document|notification|calendar",
+      "description": "タスクの詳細説明（何を、なぜ、どのように）",
+      "dependencies": [],
+      "estimated_duration": "2時間",
+      "expected_output": "期待される成果物の説明"
+    }}
+  ],
+  "execution_plan": {{
+    "total_tasks": 5,
+    "estimated_total_duration": "8時間",
+    "critical_path": ["task1", "task3", "task5"]
+  }}
+}}"""
 
 
 class TaskGenerationPromptBuilder:
@@ -58,52 +108,12 @@ class TaskGenerationPromptBuilder:
                     for mod in modifications
                 ])
         
-        # プロンプトテンプレート
-        prompt = """あなたは組織の意思決定を支援するAIエージェントです。
-Helmシステムの一部として、Executive承認に基づいて実行可能なタスクを生成します。
-
-【役割】
-- 分析結果とExecutive承認内容から、具体的な実行タスクを設計
-- タスクの依存関係を考慮
-- 各タスクの実行方法と期待される成果物を明確化
-
-【入力データ】
-- 分析結果:
-{analysis_result_json}
-
-- Executive承認内容:
-- 決定: {decision}
-- 修正内容: {modifications}
-
-- 承認された介入案:
-{interventions}
-
-【タスク設計の原則】
-1. 分析結果で検出された問題に対応する
-2. Executive承認内容を反映する
-3. 実行可能で具体的なタスクにする
-4. 依存関係を明確にする（例: データ分析 → 資料生成 → 通知）
-
-【出力形式】
-以下のJSON形式で厳密に回答してください（JSON以外のテキストは含めない）：
-{{
-  "tasks": [
-    {{
-      "id": "task1",
-      "name": "タスク名（具体的で実行可能）",
-      "type": "research|analysis|document|notification|calendar",
-      "description": "タスクの詳細説明（何を、なぜ、どのように）",
-      "dependencies": [],
-      "estimated_duration": "2時間",
-      "expected_output": "期待される成果物の説明"
-    }}
-  ],
-  "execution_plan": {{
-    "total_tasks": 5,
-    "estimated_total_duration": "8時間",
-    "critical_path": ["task1", "task3", "task5"]
-  }}
-}}""".format(
+        # ファイルからテンプレートを読み込み、失敗時はフォールバック
+        template = load_task_generation_template()
+        if not template:
+            template = _TASK_GENERATION_FALLBACK
+        
+        prompt = template.format(
             analysis_result_json=json.dumps(findings_summary, ensure_ascii=False, indent=2),
             decision=decision,
             modifications=modifications or "なし",

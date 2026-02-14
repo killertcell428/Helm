@@ -6,11 +6,19 @@ ADK統合、モック実装、フォールバック対応
 
 from services.adk_setup import get_model, get_or_create_runner, ADK_AVAILABLE
 from services.google_workspace import GoogleWorkspaceService
+from services.prompts.loader import load_agent_instruction, load_agent_prompt_template
 from typing import Dict, Any, Optional
 import logging
 import json
 
 logger = logging.getLogger(__name__)
+
+# フォールバック用instruction（ファイル読み込み失敗時）
+_RESEARCH_INSTRUCTION_FALLBACK = """
+与えられたトピックについて、市場データを検索し、分析・要約を行ってください。
+search_market_data関数でデータを収集し、analyze_market_data関数で分析してください。
+結果は構造化された形式（JSON形式）で返してください。
+"""
 
 # モックツールの戻り値スキーマを固定（将来のAPI統合を見据える）
 def search_market_data(topic: str) -> str:
@@ -55,15 +63,15 @@ def build_research_agent():
     
     from google.adk.agents.llm_agent import Agent  # or LlmAgent
     
+    instruction = load_agent_instruction("research")
+    if not instruction:
+        instruction = _RESEARCH_INSTRUCTION_FALLBACK.strip()
+    
     return Agent(
         name="research_agent",
         model=model,  # llm=ではなくmodel=（公式API準拠）
         description="市場データを収集・分析するエージェント",
-        instruction="""
-        与えられたトピックについて、市場データを検索し、分析・要約を行ってください。
-        search_market_data関数でデータを収集し、analyze_market_data関数で分析してください。
-        結果は構造化された形式（JSON形式）で返してください。
-        """,
+        instruction=instruction,
         tools=[market_search_tool, market_analysis_tool] if market_search_tool else []
     )
 
@@ -87,7 +95,8 @@ async def execute_research_task(task: Dict[str, Any], context: Dict[str, Any]) -
             
             description = task.get("description", "")
             topic = description.split("：")[-1] if "：" in description else task.get("name", "")
-            prompt = f"以下のトピックについて市場データを収集・分析してください: {topic}"
+            template = load_agent_prompt_template("research")
+            prompt = template.format(topic=topic) if template else f"以下のトピックについて市場データを収集・分析してください: {topic}"
             
             # async関数内ではrun_async()を使用
             from google.genai import types
