@@ -22,7 +22,7 @@
 | analyses_db | シグナル（分析結果） | 90〜180日 | シグナル層 |
 | escalations_db / approvals_db / executions_db | 監査・実行履歴 | 365日 | 監査証跡層 |
 
-※ 現行の「meetings/chats 90日」は、二層モデル未採用時の暫定値。二層モデル採用後は原文を超短期で破棄し、シグナルのみ中期保持とする。
+※ デフォルトは二層モデルに合わせて原文（meetings/chats/materials）を **7日** で破棄。環境変数 `RETENTION_DAYS_MEETINGS` 等で上書き可能（例: 90にすると従来どおり90日保持）。
 
 ## 削除ジョブのトリガー方針
 

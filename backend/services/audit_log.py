@@ -1,15 +1,24 @@
 """
 監査ログ機能
-いつ誰が何を見たかを記録
+いつ誰が何を見たかを記録。改ざん検知のためハッシュチェーン付与。
 """
 
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from enum import Enum
 import json
+import hashlib
 from pathlib import Path
 from utils.logger import logger
 from utils.exceptions import ServiceError
+
+
+def _compute_entry_hash(prev_hash: str, entry_payload: Dict[str, Any]) -> str:
+    """prev_hash とエントリ内容（prev_hash/entry_hash 除く）から entry_hash を計算"""
+    payload = {k: v for k, v in entry_payload.items() if k not in ("prev_hash", "entry_hash")}
+    canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    content = prev_hash + "|" + canonical
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 class AuditAction(str, Enum):
@@ -38,6 +47,8 @@ class AuditLogService:
         # メモリ内のログ（最近のログ）
         self.recent_logs: List[Dict[str, Any]] = []
         self.max_memory_logs = 1000
+        # ハッシュチェーン用：直前エントリの entry_hash
+        self._last_entry_hash = self._load_last_entry_hash()
     
     def log(
         self,
@@ -79,7 +90,12 @@ class AuditLogService:
             "device_info": device_info,
             "details": details or {}
         }
-        
+        prev_hash = self._last_entry_hash or ""
+        entry_hash = _compute_entry_hash(prev_hash, log_entry)
+        log_entry["prev_hash"] = prev_hash
+        log_entry["entry_hash"] = entry_hash
+        self._last_entry_hash = entry_hash
+
         # メモリに保存
         self.recent_logs.append(log_entry)
         if len(self.recent_logs) > self.max_memory_logs:
@@ -188,6 +204,78 @@ class AuditLogService:
         filtered_logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
         
         return filtered_logs[:limit]
+
+    def _load_last_entry_hash(self) -> str:
+        """ファイルの最終行から entry_hash を読み、チェーン継続用に返す"""
+        if not self.log_file.exists():
+            return ""
+        try:
+            with open(self.log_file, "r", encoding="utf-8") as f:
+                last_line = None
+                for line in f:
+                    if line.strip():
+                        last_line = line
+                if last_line:
+                    entry = json.loads(last_line)
+                    return entry.get("entry_hash", "") or ""
+        except Exception:
+            pass
+        return ""
+
+    def verify_chain(self) -> Dict[str, Any]:
+        """
+        監査ログのハッシュチェーンを検証する。
+        Returns:
+            {"valid": bool, "invalid_index": int or None, "total_entries": int, "message": str}
+        """
+        entries: List[Dict[str, Any]] = []
+        if self.log_file.exists():
+            try:
+                with open(self.log_file, "r", encoding="utf-8") as f:
+                    for line_num, line in enumerate(f, 1):
+                        if line.strip():
+                            try:
+                                entry = json.loads(line)
+                                if isinstance(entry, dict):
+                                    entries.append(entry)
+                            except json.JSONDecodeError:
+                                continue
+            except Exception as e:
+                return {
+                    "valid": False,
+                    "invalid_index": None,
+                    "total_entries": 0,
+                    "message": f"Failed to read log file: {e}",
+                }
+        for e in self.recent_logs:
+            if not any(x.get("log_id") == e.get("log_id") for x in entries):
+                entries.append(e)
+        entries.sort(key=lambda x: x.get("timestamp", ""))
+        prev_hash = ""
+        for i, entry in enumerate(entries):
+            expected_hash = _compute_entry_hash(prev_hash, entry)
+            actual_hash = entry.get("entry_hash", "")
+            if actual_hash != expected_hash:
+                return {
+                    "valid": False,
+                    "invalid_index": i,
+                    "total_entries": len(entries),
+                    "message": f"Hash mismatch at index {i}: expected {expected_hash[:16]}..., got {actual_hash[:16] if actual_hash else 'missing'}...",
+                }
+            if entry.get("prev_hash") != prev_hash:
+                return {
+                    "valid": False,
+                    "invalid_index": i,
+                    "total_entries": len(entries),
+                    "message": f"Prev hash mismatch at index {i}",
+                }
+            prev_hash = expected_hash
+        return {
+            "valid": True,
+            "invalid_index": None,
+            "total_entries": len(entries),
+            "message": "Chain verified successfully",
+        }
     
     def get_user_activity(
         self,

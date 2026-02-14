@@ -82,15 +82,18 @@ class Config:
     except json.JSONDecodeError:
         API_KEYS = []
 
-    # データ保存期間（日数）。未設定時はデフォルト値
-    RETENTION_DAYS_MEETINGS: int = int(os.getenv("RETENTION_DAYS_MEETINGS", "90"))
-    RETENTION_DAYS_CHATS: int = int(os.getenv("RETENTION_DAYS_CHATS", "90"))
-    RETENTION_DAYS_MATERIALS: int = int(os.getenv("RETENTION_DAYS_MATERIALS", "90"))
+    # データ保存期間（日数）。二層保持モデル推奨時は原文を7日で破棄（meetings/chats/materials）
+    RETENTION_DAYS_MEETINGS: int = int(os.getenv("RETENTION_DAYS_MEETINGS", "7"))
+    RETENTION_DAYS_CHATS: int = int(os.getenv("RETENTION_DAYS_CHATS", "7"))
+    RETENTION_DAYS_MATERIALS: int = int(os.getenv("RETENTION_DAYS_MATERIALS", "7"))
     RETENTION_DAYS_ANALYSES: int = int(os.getenv("RETENTION_DAYS_ANALYSES", "180"))
     RETENTION_DAYS_ESCALATIONS: int = int(os.getenv("RETENTION_DAYS_ESCALATIONS", "365"))
     RETENTION_DAYS_APPROVALS: int = int(os.getenv("RETENTION_DAYS_APPROVALS", "365"))
     RETENTION_DAYS_EXECUTIONS: int = int(os.getenv("RETENTION_DAYS_EXECUTIONS", "365"))
     
+    # レート制限（0で無効）。1分あたりのリクエスト数。対象は /api/ 配下のみ
+    RATE_LIMIT_REQUESTS_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "60"))
+
     # LLM統合設定
     USE_LLM: bool = os.getenv("USE_LLM", "false").lower() == "true"  # LLM統合を有効化
     LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-3-flash-preview")  # 使用するモデル（Gemini 3 Flash - 最新の推論モデル、Gen AI SDKではmodels/プレフィックス不要）
@@ -99,6 +102,8 @@ class Config:
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.2"))  # 温度パラメータ
     LLM_TOP_P: float = float(os.getenv("LLM_TOP_P", "0.95"))  # Top-pサンプリング
     OUTPUT_DIR: str = os.getenv("OUTPUT_DIR", "outputs")  # 出力ファイルの保存ディレクトリ
+    # 日次トークン上限（0は無制限）。超えた場合はLLM呼び出しをスキップしモックにフォールバック
+    LLM_DAILY_TOKEN_LIMIT: int = int(os.getenv("LLM_DAILY_TOKEN_LIMIT", "0"))
     
     @classmethod
     def get_timeout(cls, timeout_type: str = "default") -> int:

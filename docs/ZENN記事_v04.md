@@ -103,11 +103,14 @@ Helmは、以下のループを自動で回します：
 
 ```mermaid
 flowchart LR
-    A[観測] --> B[評価]
-    B --> C[介入]
-    C --> D[実行]
-    D --> E[結果取得]
-    E --> A
+    subgraph LOOP["学習・改善PDCAループ"]
+        A[観測<br/>会議・チャットの取得]
+        B[評価<br/>問題検知・スコアリング]
+        C[介入<br/>経営層へエスカレーション]
+        D[実行<br/>AI自律タスク実行]
+        E[結果取得<br/>再観測で検証]
+    end
+    A --> B --> C --> D --> E --> A
 ```
 
 **どんなときに判断が遅れやすいか、責任が曖昧になりやすいか**を学習し、時間とともに**判断の仕組みそのものが改善されていく**仕組みを実現します。例えば、Helmが検知した問題に対して経営層が介入し、その結果を次のサイクルで再観測することで、「誰が・いつ・どう判断するか」が継続的に改善されていきます。
@@ -180,47 +183,47 @@ Google Meet APIから議事録を取得し、発言者抽出、KPI検出、撤�
 ```mermaid
 flowchart LR
     subgraph INGEST["① データ取り込み"]
-        M1["Google Meet GoogleMeetService"]
-        C1["Google Chat GoogleChatService"]
-        MA["会議資料 api materials ingest"]
-        M1 --> P["パース・構造化"]
+        M1["Meet<br/>議事録取得"]
+        C1["Chat<br/>チャット取得"]
+        P["パース・構造化"]
+        M1 --> P
         C1 --> P
     end
 
     subgraph DETECT["② 検知・評価"]
-        A["StructureAnalyzer ルールベース"]
-        L["MultiRoleLLMAnalyzer 4ロールLLM"]
-        E["EnsembleScoringService 0.6×0.4"]
-        A --> E
-        L --> E
-        E --> PAT["B1 ES1 A2等 パターン検出"]
+        RULE["ルールベース<br/>KPI・撤退議論等"]
+        LLM["4ロールLLM<br/>経営者/企画/現場/ガバナンス"]
+        ENS["統合スコア<br/>0.6×ルール + 0.4×LLM"]
+        PAT["パターン検出<br/>B1/ES1/A2等"]
+        RULE --> ENS
+        LLM --> ENS
+        ENS --> PAT
     end
 
     subgraph ALERT["③ アラート・承認"]
-        ESC["EscalationEngine api escalate"]
-        APP["api approve 承認却下"]
+        ESC["エスカレーション<br/>経営層へ呼び出し"]
+        APP["承認/却下"]
         ESC --> APP
     end
 
     subgraph EXEC["④ AI自律実行"]
-        GEN["LLMService generate_tasks タスク生成"]
-        R[ResearchAgent]
-        AN[AnalysisAgent]
-        N[NotificationAgent]
-        DOC["資料 Drive保存"]
-        GEN --> R
-        GEN --> AN
-        GEN --> N
+        GEN["タスク生成"]
+        R["調査エージェント"]
+        AN["分析エージェント"]
+        N["通知エージェント"]
+        DOC["資料保存"]
+        GEN --> R & AN & N
         R --> DOC
         AN --> DOC
         N --> DOC
     end
 
-    P --> A
+    P --> RULE
     PAT --> ESC
     APP --> GEN
-    DOC --> OUT["OutputService Google Drive保存"]
 ```
+
+*図：Helmのビジネスフロー全体。左から右へ データ取り込み→検知・評価→アラート・承認→AI自律実行*
 
 ---
 
@@ -230,23 +233,44 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A[Google Meet] --> B[GoogleMeetService.get_transcript]
-    A2[Google Chat] --> B2[GoogleChatService.get_chat_messages]
-    B --> C[GoogleMeetService.parse_transcript]
-    B2 --> C2[GoogleChatService.parse_messages]
-    C --> D[発言者抽出 statements]
-    C --> E[KPI検出 kpi_mentions]
-    C --> F[撤退議論検出 exit_discussed]
-    C2 --> G[リスク検出 risk_messages]
-    C2 --> G2[反対意見 opposition_messages]
-    C2 --> G3[エスカレーション escalation_mentioned]
-    D --> H[構造化データ meetings_db / chats_db]
+    subgraph SOURCE["データソース"]
+        A[Google Meet<br/>議事録]
+        A2[Google Chat<br/>チャットログ]
+    end
+
+    subgraph PARSE["パース処理"]
+        B[議事録取得]
+        B2[チャット取得]
+        C[議事録パース]
+        C2[チャットパース]
+    end
+
+    subgraph EXTRACT["抽出項目"]
+        D[発言者抽出]
+        E[KPI検出]
+        F[撤退議論検出]
+        G[リスク検出]
+        G2[反対意見検出]
+        G3[エスカレーション検出]
+    end
+
+    subgraph STORE["保存"]
+        H[構造化データ]
+    end
+
+    A --> B --> C
+    A2 --> B2 --> C2
+    C --> D & E & F
+    C2 --> G & G2 & G3
+    D --> H
     E --> H
     F --> H
     G --> H
     G2 --> H
     G3 --> H
 ```
+
+*図：Meet/Chatから取得→パース→項目抽出→構造化データとして保存*
 
 | ツール・サービス            | 役割                                                                |
 | --------------------------- | ------------------------------------------------------------------- |
@@ -269,19 +293,37 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[アラート生成] --> B["EscalationEngine should_escalate"]
-    B --> C["RACI・承認フロー参照"]
-    B --> D["組織グラフ定義"]
-    B --> E["determine_target_role ロール選択"]
-    C --> F["経営層呼び出し api escalate"]
+    subgraph JUDGE["判断"]
+        A[アラート生成]
+        B[エスカレーション判定<br/>閾値・重要度]
+    end
+
+    subgraph REF["参照定義"]
+        C[RACI・承認フロー]
+        D[組織グラフ]
+        E[ロール選択]
+    end
+
+    subgraph ACTION["アクション"]
+        F[経営層へ呼び出し]
+        G[承認待ち]
+        H[承認]
+        I[却下]
+        J[AI実行開始]
+    end
+
+    A --> B
+    B --> C & D & E
+    C --> F
     D --> F
     E --> F
-    F --> G[承認待ち]
-    G --> H["api approve 承認"]
-    G --> I[却下]
-    H --> J["POST api execute AI実行開始"]
-    I --> K[終了]
+    F --> G
+    G --> H
+    G --> I
+    H --> J
 ```
+
+*図：アラート→判定→定義参照→経営層呼び出し→承認/却下→AI実行*
 
 | ツール・サービス                                                 | 役割                                                                                                                                                    |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -292,27 +334,33 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[承認完了] --> B[LLMService.generate_tasks<br/>タスク作成]
-    B --> C[research: ResearchAgent]
-    B --> D[analysis: AnalysisAgent]
-    B --> E[document: GoogleWorkspaceService.create_document]
-    B --> F[notification: NotificationAgent]
-    B --> G[会議調整・作成<br/>設計段階]
-    C --> C1[search_market_data]
-    C --> C2[analyze_market_data]
-    D --> D1[fetch_internal_data]
-    D --> D2[perform_financial_simulation]
-    F --> F1[generate_notification_message]
-    F --> F2[send_notification]
-    C1 --> H[タスク実行]
-    C2 --> H
-    D1 --> H
-    D2 --> H
+    subgraph START["開始"]
+        A[承認完了]
+        B[タスク作成]
+    end
+
+    subgraph AGENTS["エージェント"]
+        C[調査<br/>市場データ検索・分析]
+        D[分析<br/>社内データ・財務シミュ]
+        E[資料<br/>ドキュメント作成]
+        F[通知<br/>メッセージ生成・送信]
+    end
+
+    subgraph END["結果"]
+        H[タスク実行]
+        I[結果保存<br/>Drive]
+    end
+
+    A --> B
+    B --> C & D & E & F
+    C --> H
+    D --> H
     E --> H
-    F1 --> H
-    F2 --> H
-    H --> I[GoogleDriveService.save_file<br/>OutputService 結果保存]
+    F --> H
+    H --> I
 ```
+
+*図：承認後→タスク作成→4エージェント並列実行→結果保存*
 
 | ツール・サービス                    | 役割                                                                                                   |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -357,6 +405,56 @@ flowchart TD
 - **再実行・冪等性**: 同じ会議ログに対して分析をやり直したときに、重複タスクや二重アラートが発生しないようにする
 - **監査ログ**: 「いつ・誰に対して・どんなアラート／タスクを出したか」が後から追えるような監査証跡
 
+#### 運用・非機能要件のアーキテクチャ図
+
+```mermaid
+flowchart LR
+    subgraph IN["リクエスト"]
+        REQ[クライアント]
+    end
+
+    subgraph PROTECT["保護層"]
+        RL["レート制限<br/>1分/N回"]
+        AUTH["認証<br/>API Key"]
+    end
+
+    subgraph CORE["コア処理"]
+        API[API]
+        COST["コスト上限<br/>日次トークン"]
+        LLM[Gemini]
+        MOCK[モック]
+    end
+
+    subgraph STORE["データ保持"]
+        L1["原文 7日"]
+        L2["シグナル 180日"]
+        L3["監査 365日"]
+    end
+
+    subgraph OBS["監視・検証"]
+        MET["メトリクス<br/>/api/metrics/usage"]
+        VER["監査検証<br/>/api/audit/verify"]
+    end
+
+    REQ --> RL --> AUTH --> API
+    API --> COST
+    COST -->|OK| LLM
+    COST -->|超過| MOCK
+    API --> L1 & L2 & L3
+    API --> MET
+    API -.-> VER
+```
+
+*図：運用・非機能要件の流れ。左から右へ リクエスト→保護層→コア処理→データ保持。監視・検証はAPIと連動*
+
+**実装済みの非機能要件（技術補足）**:
+
+- **レート制限**: FastAPIミドルウェアで1分あたりNリクエストを制限。環境変数 `RATE_LIMIT_REQUESTS_PER_MINUTE` で設定（デフォルト60、0で無効）。対象は `/api/` 配下のみ。
+- **コスト上限**: LLM呼び出しごとにトークン使用量を記録し、日次累積で上限チェック。環境変数 `LLM_DAILY_TOKEN_LIMIT` を超えた場合はモックフォールバック。
+- **監査ログの改ざん耐性**: 各ログエントリに `prev_hash`・`entry_hash` のハッシュチェーンを付与。`GET /api/audit/verify` でチェーン検証が可能。
+- **分析メトリクス**: 会議1件あたりのレイテンシ・LLM呼び出し回数・トークン数を記録。`GET /api/metrics/usage` で直近の平均レイテンシ・累積トークン数・分析件数を取得可能。
+- **原文の超短期破棄（二層保持モデル）**: 原文（meetings/chats/materials）のデフォルト保持日数は **7日**。環境変数 `RETENTION_DAYS_MEETINGS` 等で上書き可能。設計は [data-retention.md](https://github.com/killertcell428/Helm/blob/main/docs/data-retention.md)。
+
 ### 現状の実装状況
 #### コア機能
 
@@ -372,11 +470,13 @@ flowchart TD
 | 項目 | 仕組み |
 |------|--------|
 | **認証** | API Key ＋ ロール（`X-API-Key`）。環境変数 `API_KEYS` で有効化。プロダクションでは OIDC / IAP / Workspace 連携の方向性を想定。 |
-| **監査** | アクション記録と `GET /api/audit/logs` で取得。 |
+| **監査** | アクション記録と `GET /api/audit/logs` で取得。各エントリにハッシュチェーン付与、`GET /api/audit/verify` で改ざん検証可能。 |
 | **誤検知・精度** | `POST /api/feedback/false-positive` で登録、`GET /api/metrics/accuracy` で指標取得。 |
 | **取得範囲・サプレッション** | ホワイトリスト（会議/チャットID）とサプレッション条件（パターン＋リソース）で制御。 |
-| **データ保存期間** | 保持日数設定と `POST /api/admin/retention/cleanup` で定期削除。設計は [data-retention.md](https://github.com/killertcell428/Helm/blob/main/docs/data-retention.md)。 |
+| **データ保存期間** | 原文（meetings/chats/materials）はデフォルト7日で破棄（二層保持モデル）。`POST /api/admin/retention/cleanup` で定期削除。設計は [data-retention.md](https://github.com/killertcell428/Helm/blob/main/docs/data-retention.md)。 |
 | **冪等性** | 同一 approval_id に対する execute の二重実行を防ぐ。設計は [idempotency-execute.md](https://github.com/killertcell428/Helm/blob/main/docs/idempotency-execute.md)。 |
+| **レート制限・コスト上限** | レート制限は1分あたりNリクエスト（`RATE_LIMIT_REQUESTS_PER_MINUTE`）。コスト上限は日次トークン数（`LLM_DAILY_TOKEN_LIMIT`）で制御。環境変数で設定可能。 |
+| **分析メトリクス** | `GET /api/metrics/usage` で直近の分析の平均レイテンシ・トークン数・分析件数を取得。 |
 
 ### ネクストステップ
 
@@ -429,10 +529,22 @@ Helmは、ルールベース結果とLLM結果を統合することで、より�
 
 ```mermaid
 flowchart LR
-    A[ルールベーススコア<br/>重み: 0.6] --> C[最終スコア]
-    B[LLM平均スコア<br/>重み: 0.4] --> C
-    C --> D[重要度・緊急度<br/>安全側を採用]
+    subgraph INPUT["入力"]
+        A[ルールベース<br/>定量指標 重み0.6]
+        B[LLM 4ロール平均<br/>文脈評価 重み0.4]
+    end
+
+    subgraph OUTPUT["出力"]
+        C[統合スコア]
+        D[重要度・緊急度<br/>安全側を採用]
+    end
+
+    A --> C
+    B --> C
+    C --> D
 ```
+
+*図：ルール×LLMのハイブリッド評価。両方のスコアを統合し、安全側の評価を採用*
 
 - **スコア計算**: 0.6 × ルールベーススコア + 0.4 × LLM平均スコア
 - **重要度・緊急度**: 安全側（最も強い）を採用（過小評価を避けるため）
@@ -491,7 +603,7 @@ A: Helmは「生産性監視」ではなく、プロジェクト内の意思決�
 2. **データの扱い**：会議・チャットの**原文は原則保存しません**。保存するのは「リスクの有無」「スコア」「根拠の要約（個人が特定できない形）」など、必要最小限のシグナルだけです。誰が何を言ったか全文を残さない設計にしています。
 3. **見られる人・使われ方**：閲覧できるのはガバナンス担当に限定し、人事評価・査定には使わないことを規程で禁止。誤検知はワンクリックで訂正でき、誰が何を見たかは監査ログで追跡できます。重要事項は事前に周知し、必要に応じ労使で協議する運用を想定しています（個人情報保護委員会の整理に沿う[^6]）。
 
-**対象外**として、1on1・私的DM・メンタル相談・労組窓口・内部通報窓口などは「絶対に見ない」と先に宣言。人事担当と運用担当は別ロールに分け、混在しない設計です。現状は誤検知FB・監査ログ・マスキング・アクセス制御を実装済み。原文の超短期破棄や社内規程への落とし込みなどは設計・検討中です。
+**対象外**として、1on1・私的DM・メンタル相談・労組窓口・内部通報窓口などは「絶対に見ない」と先に宣言。人事担当と運用担当は別ロールに分け、混在しない設計です。現状は誤検知FB・監査ログ・マスキング・アクセス制御を実装済み。**原文の超短期破棄**は環境変数（`RETENTION_DAYS_MEETINGS` 等）で7日破棄を設定可能（実装済み）。社内規程への落とし込みなどは検討中です。
 
 **Q: 導入から運用まで、どのような流れを想定していますか？**
 
@@ -537,7 +649,7 @@ A: REST APIとWebSocketで完結しており、フロントエンド（Next.js�
 
 **Q: 会議1件あたりの処理時間やコスト、スケールは？**
 
-A: 現時点では未計測です。分析は非同期・キュー方式を想定しており、会議1件あたりのコスト・処理時間は運用フェーズで計測予定です。Geminiの呼び出し回数に依存するため、事前見積もりには会議の長さやトークン数の想定が必要です。同時実行やジョブ管理はCloud RunのスケールとPub/Subで対応する設計です。
+A: `GET /api/metrics/usage` で直近の分析の平均レイテンシ・トークン数・分析件数を取得可能です。会議1件あたりの目安は運用データで確認できます。分析は非同期・キュー方式を想定しており、同時実行やジョブ管理はCloud RunのスケールとPub/Subで対応する設計です。
 
 **Q: AIモデルが運用中に劣化しない仕組みはありますか？**
 
@@ -545,15 +657,15 @@ A: モデルの再学習（継続学習）は未実装です。運用中は誤�
 
 **Q: 不正アクセスや権限の不正利用はどう防いでいますか？**
 
-A: 現状はAPI Keyとロールによる認証を実装済みです。プロダクション向けのOIDC/IAP・Workspace連携は未実装。会議・チャットへのアクセス権限はロールで分離しています。脅威モデルやセキュリティ設計のTODOはREADMEへの追記も未実施です。
+A: 現状はAPI Keyとロールによる認証を実装済みです。プロダクション向けのOIDC/IAP・Workspace連携は未実装。会議・チャットへのアクセス権限はロールで分離しています。**脅威モデル・セキュリティ設計**はREADMEに簡易脅威モデルとセキュリティ設計TODO（優先度付き）を記載済みです。
 
 **Q: レート制限やコスト暴騰、プロンプトインジェクションへの対策は？**
 
-A: レート制限・コスト上限は現状未実装で、API層での実装を予定しています。LLMへの入力は構造化データに限定し、ユーザーの自由入力は経由しない設計のため、プロンプトインジェクションは設計上抑止されています。監査ログの改ざん耐性はハッシュ値記録で対応する設計（未実装）です。
+A: **レート制限・コスト上限は実装済み**です。レート制限は1分あたりNリクエスト（環境変数 `RATE_LIMIT_REQUESTS_PER_MINUTE`）、コスト上限は日次トークン数（環境変数 `LLM_DAILY_TOKEN_LIMIT`）で制御。超えた場合は429またはモックフォールバックで対応します。LLMへの入力は構造化データに限定し、ユーザーの自由入力は経由しない設計のため、プロンプトインジェクションは設計上抑止されています。**監査ログの改ざん耐性**は各エントリにハッシュチェーンを付与し、`GET /api/audit/verify` で検証可能です。
 
 **Q: 会議・チャットのログはどのように保護・管理していますか？**
 
-A: 個人名は役職に置換し、金額や個人を特定できる情報はマスキングします。**データの保持期間は3層に分けています**：原文（議事録・チャット本文）は0〜7日で原則破棄（調査ケース化した場合のみ承認付きで延長）。シグナル（検知結果・スコア・マスク済み要約）は90〜180日。監査証跡は365日。通常の運用者は原文にアクセスできず、原文へのアクセスはケース化＋二段階承認＋理由入力＋監査でのみ可能です。アクセスはガバナンス担当に限定し、人事評価担当とは分離。自動削除は `POST /api/admin/retention/cleanup` で実行します。
+A: 個人名は役職に置換し、金額や個人を特定できる情報はマスキングします。**データの保持期間は3層に分けています**：原文（議事録・チャット本文）はデフォルト7日で破棄（環境変数 `RETENTION_DAYS_MEETINGS` 等で設定可能。調査ケース化した場合のみ承認付きで延長）。シグナル（検知結果・スコア・マスク済み要約）は90〜180日。監査証跡は365日。通常の運用者は原文にアクセスできず、原文へのアクセスはケース化＋二段階承認＋理由入力＋監査でのみ可能です。アクセスはガバナンス担当に限定し、人事評価担当とは分離。自動削除は `POST /api/admin/retention/cleanup` で実行します。
 
 ---
 

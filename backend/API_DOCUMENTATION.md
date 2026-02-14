@@ -786,16 +786,63 @@ Precision / Recall / F1 / 誤検知率を取得します。`pattern_id` でパ�
       "action": "view_analysis",
       "resource_type": "analysis",
       "resource_id": "analysis_001",
-      "details": {}
+      "details": {},
+      "prev_hash": "...",
+      "entry_hash": "..."
     }
   ],
   "count": 1
 }
 ```
 
+各エントリには改ざん検知用のハッシュチェーン（`prev_hash`, `entry_hash`）が付与されます。
+
 ---
 
-### 19. データ保存期間に基づく削除（管理用）
+### 19. 監査ログのハッシュチェーン検証
+
+**GET /api/audit/verify**
+
+監査ログのハッシュチェーンを検証し、改ざんの有無を返します。
+
+**レスポンス:**
+```json
+{
+  "valid": true,
+  "invalid_index": null,
+  "total_entries": 42,
+  "message": "Chain verified successfully"
+}
+```
+
+改ざんが検出された場合は `valid: false`、`invalid_index` に問題のインデックス、`message` に詳細が入ります。
+
+---
+
+### 20. 分析利用状況（メトリクス）取得
+
+**GET /api/metrics/usage**
+
+直近の分析の平均レイテンシ・トークン数・分析件数を取得します。
+
+**クエリパラメータ:**
+- `last_n`（オプション）: 直近 N 件に絞って集計。未指定時は全件。
+
+**レスポンス:**
+```json
+{
+  "count": 10,
+  "avg_latency_ms": 3500.5,
+  "total_llm_calls": 40,
+  "total_input_tokens": 120000,
+  "total_output_tokens": 8000,
+  "total_tokens": 128000
+}
+```
+
+---
+
+### 21. データ保存期間に基づく削除（管理用）
 
 **POST /api/admin/retention/cleanup**
 
@@ -849,6 +896,7 @@ Precision / Recall / F1 / 誤検知率を取得します。`pattern_id` でパ�
 - `401`: 認証が必要（API Key 有効時でキー未送信）
 - `403`: 認可エラー（API Key 無効・不正）
 - `404`: リソースが見つからない（`NOT_FOUND`）
+- `429`: レート制限超過（`RATE_LIMIT_EXCEEDED`）。`Retry-After` ヘッダで再試行までの秒数を示す。
 - `422`: リクエストボディのバリデーションエラー（`VALIDATION_ERROR`）
 - `500`: 内部サーバーエラー（`INTERNAL_SERVER_ERROR`）
 - `503`: サービス利用不可（`SERVICE_ERROR`）
@@ -857,6 +905,7 @@ Precision / Recall / F1 / 誤検知率を取得します。`pattern_id` でパ�
 **エラーコード一覧:**
 - `VALIDATION_ERROR`: バリデーションエラー
 - `NOT_FOUND`: リソースが見つからない
+- `RATE_LIMIT_EXCEEDED`: レート制限超過（1分あたりのリクエスト数上限）
 - `SERVICE_ERROR`: 外部サービス（Google APIなど）の呼び出しエラー
 - `TIMEOUT_ERROR`: タイムアウトエラー
 - `RETRYABLE_ERROR`: リトライ可能なエラー

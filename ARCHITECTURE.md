@@ -279,8 +279,9 @@ backend/
 │   ├── definition_loader.py # 定義ドキュメント読み込み（org_graph, raci, approval_flows）
 │   ├── responsibility_resolver.py # RACI/承認フロー解決（target_roles, approval_flow_id）
 │   ├── approval_flow_engine.py # 多段階承認フロー（ステージ遷移・全員承認判定）
-│   ├── audit_log.py # 監査ログ
+│   ├── audit_log.py # 監査ログ（ハッシュチェーン付与・改ざん検証）
 │   ├── evaluation_metrics.py # 精度指標・誤検知フィードバック
+│   ├── analysis_metrics.py # 分析メトリクス（レイテンシ・トークン数）
 │   ├── retention_cleanup.py # データ保存期間に基づく削除
 │   ├── google_workspace.py # Google Workspace統合
 │   ├── google_drive.py     # Google Drive統合
@@ -394,7 +395,9 @@ backend/
 | GET | `/api/outputs/{file_id}` | 出力ファイル取得 |
 | POST | `/api/feedback/false-positive` | 誤検知フィードバック登録 |
 | GET | `/api/metrics/accuracy` | 精度指標取得（Precision/Recall/F1、pattern_id で絞り込み可） |
-| GET | `/api/audit/logs` | 監査ログ取得（user_id, action, 期間等でフィルタ） |
+| GET | `/api/metrics/usage` | 分析利用状況（平均レイテンシ・トークン数・分析件数） |
+| GET | `/api/audit/logs` | 監査ログ取得（user_id, action, 期間等でフィルタ。ハッシュチェーン付与） |
+| GET | `/api/audit/verify` | 監査ログのハッシュチェーン検証（改ざん検知） |
 | POST | `/api/admin/retention/cleanup` | データ保存期間に基づく削除（日次バッチ用） |
 
 ### データモデル
@@ -703,11 +706,15 @@ Helmは、ルールベース分析とマルチ視点LLM分析を組み合わせ�
   - `/api/outputs/{file_id}` - 出力ファイル取得
   - `/api/feedback/false-positive` - 誤検知フィードバック
   - `/api/metrics/accuracy` - 精度指標取得
+  - `/api/metrics/usage` - 分析利用状況（レイテンシ・トークン数）
   - `/api/audit/logs` - 監査ログ取得
+  - `/api/audit/verify` - 監査ログのハッシュチェーン検証
   - `/api/admin/retention/cleanup` - データ保存期間に基づく削除
+- ✅ **レート制限・コスト上限**: 1分あたりNリクエスト（`RATE_LIMIT_REQUESTS_PER_MINUTE`）、日次トークン上限（`LLM_DAILY_TOKEN_LIMIT`）。
 - ✅ **認証（API Key ＋ ロール）**: `API_KEYS` で有効化、`X-API-Key` 検証。オーナーキー例は backend README 参照。
 - ✅ **取得範囲ホワイトリスト・サプレッション**: 会議/チャットIDのホワイトリスト、検知のサプレッション条件（config）。
-- ✅ **データ保存期間**: 保持日数設定と定期削除 API。設計は [data-retention.md](./docs/data-retention.md)。
+- ✅ **データ保存期間**: 原文はデフォルト7日、シグナル・監査は設計どおり。保持日数設定と定期削除 API。設計は [data-retention.md](./docs/data-retention.md)。
+- ✅ **監査ログ改ざん耐性**: 各エントリにハッシュチェーン付与、`GET /api/audit/verify` で検証可能。
 - ✅ **冪等性（execute）**: 同一 approval_id の再リクエストは既存実行を返す。設計は [idempotency-execute.md](./docs/idempotency-execute.md)。
 - ✅ **定義ドキュメント駆動**: 組織グラフ・RACI・承認フローを JSON で管理。DefinitionLoader、ResponsibilityResolver、ApprovalFlowEngine。多段階承認（テンプレートに基づくステージ遷移）をサポート。
 - ✅ **将来実装の設計ドキュメント**: [docs/future/](./docs/future/) に ownership-model, multi-tenancy, job-queue, notification-policy を設計のみで記載。
@@ -716,9 +723,9 @@ Helmは、ルールベース分析とマルチ視点LLM分析を組み合わせ�
 
 - ⏳ Firestore 統合（データの永続化、定義の Firestore 優先読み込み）
 - ⏳ ルート別の必要ロール（admin 専用 API 等）
-- ⏳ レート制限
-- ⏳ メトリクス収集
 - ⏳ バックグラウンドタスクキュー（Celery / Cloud Tasks 等）
+
+（レート制限・コスト上限・分析メトリクス・監査ログ改ざん耐性は実装済み）
 
 ## 参考資料
 

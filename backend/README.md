@@ -86,7 +86,9 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - `GET /api/execution/{id}/results` - 実行結果取得
 - `POST /api/feedback/false-positive` - 誤検知フィードバック
 - `GET /api/metrics/accuracy` - 精度指標取得
+- `GET /api/metrics/usage` - 分析の利用状況（平均レイテンシ・トークン数・分析件数）
 - `GET /api/audit/logs` - 監査ログ取得
+- `GET /api/audit/verify` - 監査ログのハッシュチェーン検証（改ざん検知）
 - `POST /api/admin/retention/cleanup` - データ保存期間に基づく削除
 
 ## 評価システム

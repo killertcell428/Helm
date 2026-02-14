@@ -86,6 +86,7 @@ except ImportError as e:
     AuditAction = None
 from services.output_service import OutputService
 from services.evaluation_metrics import EvaluationMetrics
+from services.analysis_metrics import AnalysisMetrics
 from services.retention_cleanup import run_retention_cleanup
 from services.definition_loader import DefinitionLoader
 from services.responsibility_resolver import ResponsibilityResolver
@@ -241,6 +242,54 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(APIKeyAuthMiddleware)
+
+
+# ==================== レート制限ミドルウェア ====================
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """API配下のリクエストを1分あたりN件に制限。client_ip 単位。0で無効。"""
+
+    SKIP_PATHS = {"/", "/docs", "/redoc", "/openapi.json"}
+
+    def __init__(self, app: ASGIApp, requests_per_minute: int = 60):
+        super().__init__(app)
+        self.requests_per_minute = requests_per_minute
+        self._timestamps: Dict[str, List[float]] = {}
+        self._lock = asyncio.Lock()
+
+    async def dispatch(self, request: Request, call_next):
+        if self.requests_per_minute <= 0:
+            return await call_next(request)
+        if request.url.path in self.SKIP_PATHS or not request.url.path.startswith("/api/"):
+            return await call_next(request)
+
+        client_ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        window_start = now - 60.0  # 1分前
+
+        async with self._lock:
+            if client_ip not in self._timestamps:
+                self._timestamps[client_ip] = []
+            timestamps = self._timestamps[client_ip]
+            timestamps.append(now)
+            # 1分より古いものを削除
+            self._timestamps[client_ip] = [t for t in timestamps if t > window_start]
+            count = len(self._timestamps[client_ip])
+
+        if count > self.requests_per_minute:
+            logger.warning(f"Rate limit exceeded: client={client_ip}, count={count}, limit={self.requests_per_minute}")
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error_code": "RATE_LIMIT_EXCEEDED",
+                    "message": "リクエスト数が上限を超えました。しばらく待ってから再試行してください。",
+                },
+                headers={"Retry-After": "60"},
+            )
+        return await call_next(request)
+
+
+app.add_middleware(RateLimitMiddleware, requests_per_minute=config.RATE_LIMIT_REQUESTS_PER_MINUTE)
 
 
 def _audit_identity(request: Request) -> tuple:
@@ -511,6 +560,7 @@ multi_view_analyzer = MultiRoleLLMAnalyzer(llm_service=llm_service)  # マルチ
 ensemble_scoring_service = EnsembleScoringService()  # アンサンブルスコアリング
 output_service = OutputService(output_dir=os.getenv("OUTPUT_DIR", "outputs"))  # 出力サービス
 evaluation_metrics = EvaluationMetrics(data_dir=os.getenv("EVALUATION_DATA_DIR", "data/evaluation"))
+analysis_metrics = AnalysisMetrics()
 
 # ==================== インメモリストレージ（開発用） ====================
 
@@ -1138,6 +1188,7 @@ async def ingest_material(request: MaterialIngestRequest):
 async def analyze(request: AnalyzeRequest):
     """構造的問題検知"""
     try:
+        analysis_start_time = time.time()
         logger.info(f"Analysis request: meeting_id={request.meeting_id}, chat_id={request.chat_id}")
         analysis_id = str(uuid.uuid4())
         
@@ -1267,6 +1318,28 @@ async def analyze(request: AnalyzeRequest):
             # ルールベースとLLMスコア（確信度計算用）
             "rule_score": rule_result.get("overall_score", 0),
             "llm_score": sum(r.get("overall_score", 0) * r.get("weight", 0) for r in multi_view_results) / max(sum(r.get("weight", 0) for r in multi_view_results), 1) if multi_view_results else 0,
+        }
+
+        # 分析メトリクス（レイテンシ・トークン数）を集計して記録
+        latency_ms = int((time.time() - analysis_start_time) * 1000)
+        input_tokens = 0
+        output_tokens = 0
+        for r in multi_view_results:
+            u = (r.get("analysis") or {}).get("_usage") or {}
+            input_tokens += u.get("input_tokens", 0)
+            output_tokens += u.get("output_tokens", 0)
+        analysis_metrics.record(
+            analysis_id=analysis_id,
+            latency_ms=latency_ms,
+            llm_calls=len(multi_view_results),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+        analysis_data["metrics"] = {
+            "latency_ms": latency_ms,
+            "llm_calls": len(multi_view_results),
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
         }
         
         analyses_db[analysis_id] = analysis_data
@@ -1783,6 +1856,17 @@ async def get_metrics_accuracy(pattern_id: Optional[str] = None):
         raise
 
 
+@app.get("/api/metrics/usage")
+async def get_metrics_usage(last_n: Optional[int] = None):
+    """分析の利用状況を取得（直近の平均レイテンシ・トークン数・分析件数）。last_n で直近 N 件に絞る。"""
+    try:
+        stats = analysis_metrics.get_usage_stats(last_n=last_n)
+        return stats
+    except Exception as e:
+        logger.error(f"Unexpected error in get_metrics_usage: {e}", exc_info=True)
+        raise
+
+
 @app.post("/api/admin/retention/cleanup")
 async def admin_retention_cleanup():
     """保存期間を超えたデータを削除（日次バッチ用）。"""
@@ -1868,6 +1952,25 @@ async def get_audit_logs(
         raise
     except Exception as e:
         logger.error(f"Unexpected error in get_audit_logs: {e}", exc_info=True)
+        raise
+
+
+@app.get("/api/audit/verify")
+async def get_audit_verify():
+    """監査ログのハッシュチェーンを検証。改ざんの有無を返す。"""
+    try:
+        if not audit_log_service:
+            raise ServiceError(
+                message="監査ログサービスが利用できません。",
+                service_name="AuditLogService",
+                details={}
+            )
+        result = audit_log_service.verify_chain()
+        return result
+    except HelmException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in get_audit_verify: {e}", exc_info=True)
         raise
 
 

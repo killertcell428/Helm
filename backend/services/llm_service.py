@@ -121,7 +121,7 @@ class LLMService:
             prompt = AnalysisPromptBuilder.build(meeting_data, chat_data, materials_data)
         
         # LLM APIを呼び出し
-        response_text = self._call_llm(
+        response_text, usage = self._call_llm(
             prompt=prompt,
             response_format="json",
             model_name=self.model_name
@@ -156,7 +156,9 @@ class LLMService:
         parsed_result["_is_mock"] = False  # LLM生成データであることを明示
         parsed_result["_llm_status"] = "success"
         parsed_result["_llm_model"] = self.model_name
-        
+        if usage:
+            parsed_result["_usage"] = usage
+
         logger.info(f"✅ LLM分析完了（実際のLLM生成）: overall_score={parsed_result.get('overall_score', 0)}, model={self.model_name}")
         
         return parsed_result
@@ -193,7 +195,7 @@ class LLMService:
         )
         
         # LLM APIを呼び出し
-        response_text = self._call_llm(
+        response_text, usage = self._call_llm(
             prompt=prompt,
             response_format="json",
             model_name=self.model_name
@@ -235,9 +237,9 @@ class LLMService:
         prompt: str,
         response_format: str = "text",
         model_name: Optional[str] = None
-    ) -> Optional[str]:
+    ) -> tuple:
         """
-        LLM APIを呼び出し（Gen AI SDK専用）
+        LLM APIを呼び出し（Gen AI SDK専用）。戻り値は (response_text, usage_dict)。
         
         Args:
             prompt: プロンプト
@@ -248,11 +250,21 @@ class LLMService:
             レスポンステキスト、失敗時はNone
         """
         model = model_name or self.model_name
+
+        # 日次トークン上限チェック（超えていればLLM呼び出しをスキップ）
+        try:
+            from utils.llm_usage_tracker import get_usage_tracker
+            tracker = get_usage_tracker(getattr(config, "LLM_DAILY_TOKEN_LIMIT", 0))
+            if tracker.is_over_limit():
+                logger.warning("LLM daily token limit exceeded, skipping LLM call (mock fallback)")
+                return None, {}
+        except Exception as e:
+            logger.debug(f"Usage tracker check skipped: {e}")
         
         # Gen AI SDK（google-generativeai）のみを使用
         if not self._genai_available:
             logger.warning("Gen AI SDKが利用できません（GOOGLE_API_KEY未設定またはgoogle-generativeai未インストール）")
-            return None
+            return None, {}
         
         # モデル名をGen AI SDK用に調整（models/プレフィックスを削除）
         # Gen AI SDKでは models/ プレフィックスは不要（エラーの原因）
@@ -292,7 +304,7 @@ class LLMService:
                     if attempt < self.max_retries - 1:
                         time.sleep(2 ** attempt)  # 指数バックオフ
                         continue
-                    return None
+                    return None, {}
                 
                 # レスポンステキストを取得
                 response_text = getattr(resp, "text", None)
@@ -301,10 +313,24 @@ class LLMService:
                     if attempt < self.max_retries - 1:
                         time.sleep(2 ** attempt)
                         continue
-                    return None
-                
+                    return None, {}
+
+                # トークン使用量（usage_metadata があれば取得）
+                usage = {}
+                um = getattr(resp, "usage_metadata", None)
+                if um is not None:
+                    usage["input_tokens"] = getattr(um, "prompt_token_count", 0) or 0
+                    usage["output_tokens"] = getattr(um, "candidates_token_count", 0) or getattr(um, "output_token_count", 0) or 0
+                    try:
+                        from utils.llm_usage_tracker import get_usage_tracker
+                        get_usage_tracker(getattr(config, "LLM_DAILY_TOKEN_LIMIT", 0)).add(
+                            usage.get("input_tokens", 0), usage.get("output_tokens", 0)
+                        )
+                    except Exception:
+                        pass
+
                 logger.info(f"Gen AI SDK呼び出し成功: model={genai_model_name}, elapsed={elapsed_time:.2f}s")
-                return response_text
+                return response_text, usage
                 
             except Exception as e:
                 error_type = type(e).__name__
@@ -326,9 +352,9 @@ class LLMService:
                     time.sleep(delay)
                     continue
                 logger.error(f"Gen AI SDK呼び出しが{self.max_retries}回失敗しました。")
-                return None
-        
-        return None
+                return None, {}
+
+        return None, {}
     
     def _mock_analyze(
         self,

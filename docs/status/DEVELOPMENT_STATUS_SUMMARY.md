@@ -1,6 +1,6 @@
 # 開発状況サマリー
 
-**最終更新**: 2025年2月11日
+**最終更新**: 2026年2月14日
 
 ---
 
@@ -20,10 +20,12 @@
 | 項目 | 仕組み |
 |------|--------|
 | **認証** | API Key ＋ ロール（`X-API-Key`）。環境変数 `API_KEYS` で有効化。 |
-| **監査** | アクション記録と `GET /api/audit/logs` で取得。 |
+| **監査** | アクション記録と `GET /api/audit/logs` で取得。各エントリにハッシュチェーン付与、`GET /api/audit/verify` で改ざん検証可能。 |
 | **誤検知・精度** | `POST /api/feedback/false-positive` で登録、`GET /api/metrics/accuracy` で指標取得。 |
+| **分析メトリクス** | 会議1件あたりのレイテンシ・トークン数を記録。`GET /api/metrics/usage` で直近の平均・累積を取得。 |
+| **レート制限・コスト上限** | レート制限は1分あたりNリクエスト（`RATE_LIMIT_REQUESTS_PER_MINUTE`）。日次トークン上限（`LLM_DAILY_TOKEN_LIMIT`）でモックフォールバック。 |
 | **取得範囲・サプレッション** | ホワイトリスト（会議/チャットID）とサプレッション条件（パターン＋リソース）で制御。 |
-| **データ保存期間** | 保持日数設定と `POST /api/admin/retention/cleanup` で定期削除。設計は [data-retention.md](../data-retention.md)。 |
+| **データ保存期間** | 原文（meetings/chats/materials）はデフォルト7日、シグナル・監査は設計どおり。`POST /api/admin/retention/cleanup` で定期削除。設計は [data-retention.md](../data-retention.md)。 |
 | **冪等性** | 同一 approval_id に対する execute の二重実行を防ぐ。設計は [idempotency-execute.md](../idempotency-execute.md)。 |
 
 ### 定義ドキュメント（組織グラフ・RACI・承認フロー）
