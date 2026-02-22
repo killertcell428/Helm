@@ -1,6 +1,6 @@
 # 開発状況サマリー
 
-**最終更新**: 2026年2月14日
+**最終更新**: 2026年2月21日
 
 ---
 
@@ -11,7 +11,7 @@
 | 領域 | 内容 |
 |------|------|
 | **データ取り込み** | Google Meet / Chat / 会議資料の ingest API。パース・構造化まで一通り対応。 |
-| **検知・評価** | ルールベース（StructureAnalyzer）＋マルチ視点LLM（4ロール）＋アンサンブルスコアリング。パターン検出でアラート生成。 |
+| **検知・評価** | ルールベース（StructureAnalyzer）＋マルチ視点LLM（4ロール）＋アンサンブルスコアリング。意思決定の詰まり（判断の遅れ・責任の曖昧さ等）をパターン検出でアラート生成。適応領域は [適応領域と制約](../design/適応領域と制約.md) を参照。 |
 | **アラート・承認** | EscalationEngine（閾値・重要度）、`POST /api/escalate`・`POST /api/approve`。組織グラフ・RACI・承認フローは JSON 定義で制御（後述）。 |
 | **AI自律実行** | ADK ベースのマルチエージェント（Research / Analysis / Notification / Document）。WebSocket で進捗配信。Phase1 はモック＋フォールバック完了。 |
 
@@ -28,7 +28,7 @@
 | **データ保存期間** | 原文（meetings/chats/materials）はデフォルト7日、シグナル・監査は設計どおり。`POST /api/admin/retention/cleanup` で定期削除。設計は [data-retention.md](../data-retention.md)。 |
 | **冪等性** | 同一 approval_id に対する execute の二重実行を防ぐ。設計は [idempotency-execute.md](../idempotency-execute.md)。 |
 
-### 定義ドキュメント（組織グラフ・RACI・承認フロー）
+### 役割と承認のルール（組織グラフ・RACI・承認フロー）
 
 - `backend/config/definitions/` に org_graph・raci・approval_flows を JSON で配置。
 - DefinitionLoader / ResponsibilityResolver / ApprovalFlowEngine が EscalationEngine と approve に組み込み済み。
@@ -39,10 +39,11 @@
 
 | 項目 | 状態 |
 |------|------|
-| **バックエンド** | Cloud Run デプロイ済み（[API](https://helm-api-dsy6lzllhq-an.a.run.app)）。Gemini 3 Flash 動作確認済み。 |
-| **フロントエンド** | Vercel デプロイ済み（[デモ](https://v0-helm-pdca-demo.vercel.app)）。Case1 デモ・WebSocket 進捗・エラーハンドリング対応。 |
+| **バックエンド** | Cloud Run デプロイ済み（[API](https://helm-api-dsy6lzllhq-an.a.run.app)）。Gemini 3 Flash 動作確認済み。**提出済み・審査中のため本番デプロイは変更しない。** |
+| **フロントエンド** | Vercel デプロイ済み（[デモ](https://v0-helm-pdca-demo.vercel.app)）。Case1 デモ・WebSocket 進捗・エラーハンドリング対応。**提出済み・審査中のため本番デプロイは変更しない。** |
 | **GitHub** | 公開リポジトリ。 |
-| **Zenn記事・デモ動画** | 制作依頼中／進行中。 |
+| **Zenn記事** | 完了・投稿済み。 |
+| **YouTube動画（デモ動画）** | 完了・投稿済み。 |
 
 ---
 

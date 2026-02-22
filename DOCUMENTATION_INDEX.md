@@ -11,6 +11,7 @@ Helmプロジェクトの主要ドキュメント一覧です。
 
 ### 進捗・実装状況
 - [docs/status/DEVELOPMENT_STATUS_SUMMARY.md](./docs/status/DEVELOPMENT_STATUS_SUMMARY.md) - **現状の開発状況**と**ネクストステップ**の整理 ⭐ **最新**
+- [docs/status/1か月本番プレゼン_棚卸と計画の前提.md](./docs/status/1か月本番プレゼン_棚卸と計画の前提.md) - **1か月本番プレゼン向け**の棚卸・計画の前提（現状整理・設計中/未実装の一覧・計画の軸）
 - [docs/status/CURRENT_DEVELOPMENT_STATUS.md](./docs/status/CURRENT_DEVELOPMENT_STATUS.md) - 開発状況の詳細
 - [docs/status/NEXT_STEPS.md](./docs/status/NEXT_STEPS.md) - 次のステップ（タスク単位・完了済み含む）
 - [docs/status/PROJECT_STATUS.md](./docs/status/PROJECT_STATUS.md) - プロジェクト状況
@@ -22,6 +23,7 @@ Helmプロジェクトの主要ドキュメント一覧です。
 - [backend/API_DOCUMENTATION.md](./backend/API_DOCUMENTATION.md) - API仕様書
 
 ### 設計・運用（ガバナンスまわり）
+- [docs/design/適応領域と制約.md](./docs/design/適応領域と制約.md) - **Helm の適応領域と制約**（対象・対象外・制約・仕組み。記事・FAQ・開発の整合用） ⭐
 - [docs/auth-api-key-roles.md](./docs/auth-api-key-roles.md) - 認証（API Key ＋ ロール）設計・有効化方法
 - [docs/data-retention.md](./docs/data-retention.md) - データ保存期間と自動削除の設計
 - [docs/idempotency-execute.md](./docs/idempotency-execute.md) - 冪等性（execute）の設計

@@ -100,7 +100,7 @@ Dev/
 │   ├── services/              # サービス層
 │   │   ├── google_meet.py     # Google Meet統合
 │   │   ├── google_chat.py     # Google Chat統合
-│   │   ├── analyzer.py        # 構造的問題検知（ルールベース）
+│   │   ├── analyzer.py        # 意思決定の詰まりの検知（ルールベース）
 │   │   ├── multi_view_analyzer.py  # マルチ視点LLM分析
 │   │   ├── ensemble_scoring.py     # アンサンブルスコアリング
 │   │   ├── llm_service.py     # LLM統合サービス
@@ -259,5 +259,6 @@ AI自律実行（4エージェント並列） → 結果保存 → 再観測で�
 - [x] デプロイURL（動作確認可能）
   - バックエンド: https://helm-api-dsy6lzllhq-an.a.run.app
   - フロントエンド: https://v0-helm-pdca-demo.vercel.app
-- [x] Zenn記事（概要、アーキテクチャ図、デモ動画）
-  - https://zenn.dev/charles_389no/articles/f4adff7b7bcaf8
+- [x] Zenn記事（概要、アーキテクチャ図、デモ動画）・YouTube動画 — 完了・投稿済み
+  - Zenn: https://zenn.dev/charles_389no/articles/f4adff7b7bcaf8
+  - デプロイ済みサービスは提出済み・審査中のため変更しない。

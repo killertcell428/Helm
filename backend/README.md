@@ -25,7 +25,7 @@ HelmのバックエンドAPIサーバー。Googleサービス統合とAI自律�
 
 - Google Meet議事録の取り込み
 - Google Chatログの取り込み
-- **マルチ視点評価システム**による構造的問題検知
+- **マルチ視点評価システム**による意思決定の詰まりの検知
   - ルールベース分析（定量的指標に基づく検知）
   - マルチ視点LLM分析（4つのロール視点から評価）
   - アンサンブルスコアリング（統合評価）
@@ -77,7 +77,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 - `POST /api/meetings/ingest` - 議事録取り込み
 - `POST /api/chat/ingest` - チャット取り込み
-- `POST /api/analyze` - 構造的問題検知
+- `POST /api/analyze` - 意思決定の詰まりの検知
 - `GET /api/analysis/{id}` - 分析結果取得
 - `POST /api/escalate` - Executive呼び出し
 - `POST /api/approve` - Executive承認（多段階承認フロー対応・`reject`・`approver_role_id`）
